@@ -8,6 +8,7 @@ import { BotService, PendingMessageType } from '../../bot/services/bot.service';
 import { config } from "../../config";
 import { IFeedResponse } from "../interfaces/feed-response.interface";
 import { BotMessageText } from "../../bot/helpers/bot-message-text.helper";
+import { AxiosHeaders, AxiosResponse, RawAxiosResponseHeaders } from "axios";
 
 // login method 0 - sms, input 4 digits
 // login method 1 - incoming call, input last 3 digits of phone number
@@ -134,7 +135,18 @@ export class KdService implements OnApplicationBootstrap {
     };
     /* eslint-enable */
 
-    const { data, headers } = await firstValueFrom(this.httpService.request<IFeedResponse>(urlConfig));
+    let response: AxiosResponse<IFeedResponse>;
+    try {
+      response = await firstValueFrom(this.httpService.request<IFeedResponse>(urlConfig));
+    } catch (e) {
+      this.logger.error(`Could not get feed:`);
+      this.logger.error(e);
+      this.botService.sendMessageToOwner(new BotMessageText(`Could not get feed`)).then();
+      return;
+    }
+
+    const { data, headers } = response;
+
     await this.processFeed(data);
 
     let nextRequestDelay = config.kdFeedRequestTimeout;
