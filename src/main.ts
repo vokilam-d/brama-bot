@@ -11,7 +11,7 @@ async function bootstrap() {
     AppModule,
     new FastifyAdapter()
   );
-  app.setGlobalPrefix(`/api/v1`);
+  app.setGlobalPrefix(`/brama-bot/api/v1`);
 
   await app.listen(config.port, '0.0.0.0');
 
