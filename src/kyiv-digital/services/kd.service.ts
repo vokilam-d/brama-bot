@@ -5,10 +5,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { BotService, PendingMessageType } from '../../bot/services/bot.service';
-import { config } from "../../config";
-import { IFeedResponse } from "../interfaces/feed-response.interface";
-import { BotMessageText } from "../../bot/helpers/bot-message-text.helper";
-import { AxiosHeaders, AxiosResponse, RawAxiosResponseHeaders } from "axios";
+import { config } from '../../config';
+import { IFeedResponse } from '../interfaces/feed-response.interface';
+import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
+import { AxiosResponse } from 'axios';
 
 // login method 0 - sms, input 4 digits
 // login method 1 - incoming call, input last 3 digits of phone number
@@ -19,6 +19,10 @@ export class KdService implements OnApplicationBootstrap {
   private logger = new Logger(KdService.name);
 
   private kdConfig: KdConfig;
+  private feedRequestsCounter = {
+    count: 0,
+    limitsLeft: [],
+  };
 
   private readonly phoneNumber = config.phoneNumber;
   private readonly apiHost = `https://kyiv.digital/api`; // https://stage.kyiv.digital/api
@@ -34,6 +38,14 @@ export class KdService implements OnApplicationBootstrap {
     this.botService.events.on(PendingMessageType.askForCode, code => {
       this.logger.debug({ code });
     });
+
+    setInterval(() => {
+      this.logger.debug(this.feedRequestsCounter);
+      this.feedRequestsCounter = {
+        count: 0,
+        limitsLeft: [],
+      };
+    }, 1000 * 60 * 60);
 
     try {
       await this.ensureAndCacheConfig();
@@ -135,13 +147,15 @@ export class KdService implements OnApplicationBootstrap {
     };
     /* eslint-enable */
 
+    this.feedRequestsCounter.count++;
+
     let response: AxiosResponse<IFeedResponse>;
     try {
       response = await firstValueFrom(this.httpService.request<IFeedResponse>(urlConfig));
     } catch (e) {
       this.logger.error(`Could not get feed:`);
       this.logger.error(e);
-      this.botService.sendMessageToOwner(new BotMessageText(`Could not get feed`)).then();
+      this.botService.sendMessageToOwner(new BotMessageText(`Could not get feed: ${e}`)).then();
       return;
     }
 
@@ -151,6 +165,8 @@ export class KdService implements OnApplicationBootstrap {
 
     let nextRequestDelay = config.kdFeedRequestTimeout;
     const rateLimitLeft = Number(headers['x-ratelimit-remaining']);
+    this.feedRequestsCounter.limitsLeft.push(rateLimitLeft);
+
     if (rateLimitLeft <= 5) {
       nextRequestDelay *= 3;
 
