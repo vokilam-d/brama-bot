@@ -2,8 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { Logger } from '@nestjs/common';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import { config } from "./config";
 
-const port = 3000;
 const logger = new Logger('main.ts');
 
 async function bootstrap() {
@@ -11,8 +11,10 @@ async function bootstrap() {
     AppModule,
     new FastifyAdapter()
   );
-  await app.listen(port, '0.0.0.0');
+  app.setGlobalPrefix(`/api/v1`);
 
-  logger.log(`Server running on port ${port}`);
+  await app.listen(config.port, '0.0.0.0');
+
+  logger.log(`Server running on port ${config.port}`);
 }
 bootstrap();
