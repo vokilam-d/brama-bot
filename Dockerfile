@@ -1,5 +1,7 @@
 FROM node:20.15.1-alpine as builder
 
+ENV TZ 'Europe/Kiev'
+
 WORKDIR /app
 
 COPY package.json ./
