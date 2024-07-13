@@ -161,21 +161,26 @@ export class KdService implements OnApplicationBootstrap {
 
     const { data, headers } = response;
 
-    await this.processFeed(data);
+    try {
+      await this.processFeed(data);
 
-    let nextRequestDelay = config.kdFeedRequestTimeout;
-    const rateLimitLeft = Number(headers['x-ratelimit-remaining']);
-    this.feedRequestsCounter.limitsLeft.push(rateLimitLeft);
+      let nextRequestDelay = config.kdFeedRequestTimeout;
+      const rateLimitLeft = Number(headers['x-ratelimit-remaining']);
+      this.feedRequestsCounter.limitsLeft.push(rateLimitLeft);
 
-    if (rateLimitLeft <= 5) {
-      nextRequestDelay *= 3;
+      if (rateLimitLeft <= 5) {
+        nextRequestDelay *= 5;
 
-      await this.botService.sendMessageToOwner(
-        new BotMessageText(`Rate limit left: ${rateLimitLeft}`)
-      );
+        this.botService.sendMessageToOwner(new BotMessageText(`Rate limit left: ${rateLimitLeft}`)).then();
+      }
+
+      setTimeout(() => this.getFeed(), nextRequestDelay);
+
+    } catch (e) {
+      this.logger.error(`Could not process feed:`);
+      this.logger.error(e);
+      this.botService.sendMessageToOwner(new BotMessageText(`Could not process feed: ${e}`)).then();
     }
-
-    setTimeout(() => this.getFeed(), nextRequestDelay);
   }
 
   private async persistConfig(): Promise<void> {
