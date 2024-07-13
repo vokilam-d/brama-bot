@@ -45,7 +45,7 @@ export class KdService implements OnApplicationBootstrap {
         count: 0,
         limitsLeft: [],
       };
-    }, 1000 * 60 * 60);
+    }, 1000 * 60 * 30);
 
     try {
       await this.ensureAndCacheConfig();
@@ -169,7 +169,7 @@ export class KdService implements OnApplicationBootstrap {
       this.feedRequestsCounter.limitsLeft.push(rateLimitLeft);
 
       if (rateLimitLeft <= 5) {
-        nextRequestDelay *= 5;
+        nextRequestDelay *= 10;
 
         this.botService.sendMessageToOwner(new BotMessageText(`Rate limit left: ${rateLimitLeft}`)).then();
       }
