@@ -220,7 +220,7 @@ export class KdService implements OnApplicationBootstrap {
         .newLine()
         .addLine(newFeedDcnItem.description);
 
-      await this.botService.sendMessageToChannel(botMessageText);
+      await this.botService.sendMessageToAllGroups(botMessageText);
     }
 
     this.kdConfig.lastProcessedFeedId = firstFeedItem.id;

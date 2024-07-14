@@ -12,6 +12,7 @@ import { ITelegramReplyKeyboardMarkup } from '../interfaces/reply-keyboard-marku
 import { ITelegramReplyKeyboardRemove } from '../interfaces/reply-keyboard-remove.interface';
 import { ITelegramMessage } from '../interfaces/message.interface';
 import { EventEmitter } from 'events';
+import { BotSentMessage } from '../schemas/bot-sent-message.schema';
 
 export type ReplyMarkup = ITelegramInlineKeyboardMarkup | ITelegramReplyKeyboardMarkup | ITelegramReplyKeyboardRemove;
 
@@ -51,6 +52,7 @@ export class BotService implements OnApplicationBootstrap {
 
   constructor(
     @InjectModel(BotConfig.name) private botConfigModel: Model<BotConfig>,
+    @InjectModel(BotSentMessage.name) private botSentMessageModel: Model<BotSentMessage>,
     private readonly httpService: HttpService,
   ) {
   }
@@ -102,10 +104,12 @@ export class BotService implements OnApplicationBootstrap {
     this.logger.debug(`Asking for code finished`);
   }
 
-  async sendMessageToChannel(
+  async sendMessageToAllGroups(
     text: BotMessageText,
   ): Promise<void> {
-    await this.sendMessage(this.botConfig.channelId, text);
+    for (const group of this.botConfig.groups) {
+      await this.sendMessage(group.id, text, { messageThreadId: group.threadId });
+    }
   }
 
   async sendMessageToOwner(
@@ -119,6 +123,7 @@ export class BotService implements OnApplicationBootstrap {
     chatId: string | number,
     text: BotMessageText,
     options: {
+      messageThreadId?: number,
       replyParameters?: ITelegramReplyParameters,
       replyMarkup?: ReplyMarkup,
     } = {},
@@ -130,6 +135,9 @@ export class BotService implements OnApplicationBootstrap {
     };
 
     payload.parse_mode = this.textParseMode;
+    if (options.messageThreadId) {
+      payload.message_thread_id = options.messageThreadId;
+    }
     if (options.replyParameters) {
       payload.reply_parameters = options.replyParameters;
     }
@@ -145,6 +153,9 @@ export class BotService implements OnApplicationBootstrap {
       const sentMessage = await this.execMethod<ITelegramMessage>(ApiMethodName.SendMessage, payload);
       sentMessages.push(sentMessage);
     }
+
+    this.persistSentMessages(sentMessages).then();
+
     return sentMessages;
   }
 
@@ -230,6 +241,23 @@ export class BotService implements OnApplicationBootstrap {
     } catch (e) {
       this.logger.error(`Could not cache config:`);
       this.logger.error(e);
+    }
+  }
+
+  private async persistSentMessages(sentMessages: ITelegramMessage[]): Promise<void> {
+    for (const sentMessage of sentMessages) {
+      try {
+        await this.botSentMessageModel.create({
+          messageId: sentMessage.message_id,
+          chatId: sentMessage.chat.id,
+          messageThreadId: sentMessage.message_thread_id,
+          text: sentMessage.text,
+          sentAtIso: new Date(sentMessage.date * 1000).toISOString(),
+        });
+      } catch (e) {
+        this.logger.error(`Could not persist sent message:`);
+        this.logger.error(e);
+      }
     }
   }
 }

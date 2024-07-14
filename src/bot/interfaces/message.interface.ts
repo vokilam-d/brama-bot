@@ -60,4 +60,6 @@ export interface ITelegramMessage {
   voice_chat_ended?: any;
   voice_chat_participants_invited?: any;
   reply_markup?: ITelegramInlineKeyboardMarkup;
+  message_thread_id?: number;
+  is_topic_message: boolean;
 }
