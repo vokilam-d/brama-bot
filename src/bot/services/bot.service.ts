@@ -237,7 +237,8 @@ export class BotService implements OnApplicationBootstrap {
         await this.botConfigModel.create(this.botConfig);
       }
 
-      this.logger.debug(`Caching config finished`);
+      this.logger.debug(`Caching config finished:`);
+      this.logger.debug(this.botConfig);
     } catch (e) {
       this.logger.error(`Could not cache config:`);
       this.logger.error(e);
