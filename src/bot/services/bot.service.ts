@@ -231,7 +231,7 @@ export class BotService implements OnApplicationBootstrap {
       this.botConfig = await this.botConfigModel.findOne().exec();
 
       if (!this.botConfig) {
-        this.logger.debug(`Did not found bot config, creating new...`);
+        this.logger.debug(`Did not find bot config, creating new...`);
 
         this.botConfig = new BotConfig();
         await this.botConfigModel.create(this.botConfig);
