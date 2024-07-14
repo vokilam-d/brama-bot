@@ -21,7 +21,7 @@ export class KdService implements OnApplicationBootstrap {
   private kdConfig: KdConfig;
   private feedRequestsCounter = {
     count: 0,
-    limitsLeft: [],
+    limitsLeft: new Set(),
   };
 
   private readonly phoneNumber = config.phoneNumber;
@@ -43,9 +43,9 @@ export class KdService implements OnApplicationBootstrap {
       this.logger.debug(this.feedRequestsCounter);
       this.feedRequestsCounter = {
         count: 0,
-        limitsLeft: [],
+        limitsLeft: new Set(),
       };
-    }, 1000 * 60 * 30);
+    }, config.kdFeedRequestTimeout * 60);
 
     try {
       await this.ensureAndCacheConfig();
@@ -166,7 +166,7 @@ export class KdService implements OnApplicationBootstrap {
 
       let nextRequestDelay = config.kdFeedRequestTimeout;
       const rateLimitLeft = Number(headers['x-ratelimit-remaining']);
-      this.feedRequestsCounter.limitsLeft.push(rateLimitLeft);
+      this.feedRequestsCounter.limitsLeft.add(rateLimitLeft);
 
       if (rateLimitLeft <= 5) {
         nextRequestDelay *= 10;
