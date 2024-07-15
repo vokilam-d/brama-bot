@@ -108,15 +108,28 @@ export class BotService implements OnApplicationBootstrap {
     text: BotMessageText,
   ): Promise<void> {
     for (const group of this.botConfig.groups) {
-      await this.sendMessage(group.id, text, { messageThreadId: group.threadId });
+      try {
+        await this.sendMessage(group.id, text, { messageThreadId: group.threadId });
+      } catch (e) {
+        const message = `Could not send message to group`;
+        this.logger.error(message);
+        this.logger.error({ group });
+        this.logger.error(e, e.stack);
+        this.sendMessageToOwner(new BotMessageText(message)).then();
+      }
     }
   }
 
   async sendMessageToOwner(
     text: BotMessageText,
   ): Promise<void> {
-    const ownerId = this.botConfig.ownerIds[0];
-    await this.sendMessage(ownerId, text);
+    try {
+      const ownerId = this.botConfig.ownerIds[0];
+      await this.sendMessage(ownerId, text);
+    } catch (e) {
+      this.logger.error(`Could not send message to owner:`);
+      this.logger.error(e, e.stack);
+    }
   }
 
   private async sendMessage(
@@ -180,11 +193,17 @@ export class BotService implements OnApplicationBootstrap {
 
   private async execMethod<T = any>(methodName: ApiMethodName, data: any): Promise<T> {
     const url = `${this.apiHost}/bot${this.token}/${methodName}`;
+
+    this.logger.debug(`Executing method:...`);
+    this.logger.debug({ url, data });
+
     try {
       const response = await firstValueFrom(this.httpService.post<{ ok: boolean; result: T }>(url, data));
       if (response.data?.ok !== true) {
         throw response.data;
       }
+
+      this.logger.debug(`Executing method finished`);
 
       return response.data.result;
     } catch (error) {
@@ -247,6 +266,13 @@ export class BotService implements OnApplicationBootstrap {
 
   private async persistSentMessages(sentMessages: ITelegramMessage[]): Promise<void> {
     for (const sentMessage of sentMessages) {
+      if (!sentMessage) {
+        const message = `Not sent message to persist`;
+        this.logger.error(message);
+        this.sendMessageToOwner(new BotMessageText(message)).then();
+        continue;
+      }
+
       try {
         await this.botSentMessageModel.create({
           messageId: sentMessage.message_id,

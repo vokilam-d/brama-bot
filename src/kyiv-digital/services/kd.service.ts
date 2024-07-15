@@ -40,11 +40,12 @@ export class KdService implements OnApplicationBootstrap {
     });
 
     setInterval(() => {
-      this.logger.debug(this.feedRequestsCounter);
-      this.feedRequestsCounter = {
-        count: 0,
-        limitsLeft: new Set(),
-      };
+      this.logger.debug({
+        count: this.feedRequestsCounter.count,
+        limitsLeft: [...this.feedRequestsCounter.limitsLeft.values()],
+      });
+      this.feedRequestsCounter.count = 0;
+      this.feedRequestsCounter.limitsLeft.clear();
     }, config.kdFeedRequestTimeout * 60);
 
     try {
@@ -53,7 +54,7 @@ export class KdService implements OnApplicationBootstrap {
       await this.getFeed();
     } catch (e) {
       this.logger.error(`Could not init:`);
-      this.logger.error(e);
+      this.logger.error(e, e.stack);
     }
   }
 
@@ -82,7 +83,7 @@ export class KdService implements OnApplicationBootstrap {
       this.logger.debug(`Validating persisted token finished, accessToken=${this.kdConfig.accessToken}`);
     } catch (e) {
       this.logger.error(`Could not validate persisted token:`);
-      this.logger.error(e);
+      this.logger.error(e, e.stack);
     }
   }
 
@@ -95,7 +96,7 @@ export class KdService implements OnApplicationBootstrap {
     //   const { data } = await firstValueFrom(this.httpService.post<any>(url, url));
     //   this.logger.log({ data })
     // } catch (e) {
-    //   this.logger.error(e);
+    //   this.logger.error(e, e.stack);
     // }
 
     this.logger.debug(`Login finished`);
@@ -110,7 +111,7 @@ export class KdService implements OnApplicationBootstrap {
     //   const { data } = await firstValueFrom(this.httpService.get<any>(url));
     //   this.logger.log({ data })
     // } catch (e) {
-    //   this.logger.error(e);
+    //   this.logger.error(e, e.stack);
     // }
 
     this.logger.debug(`Refreshing token finished`);
@@ -154,7 +155,7 @@ export class KdService implements OnApplicationBootstrap {
       response = await firstValueFrom(this.httpService.request<IFeedResponse>(urlConfig));
     } catch (e) {
       this.logger.error(`Could not get feed:`);
-      this.logger.error(e);
+      this.logger.error(e, e.stack);
       this.botService.sendMessageToOwner(new BotMessageText(`Could not get feed: ${e}`)).then();
       return;
     }
@@ -178,7 +179,7 @@ export class KdService implements OnApplicationBootstrap {
 
     } catch (e) {
       this.logger.error(`Could not process feed:`);
-      this.logger.error(e);
+      this.logger.error(e, e.stack);
       this.botService.sendMessageToOwner(new BotMessageText(`Could not process feed: ${e}`)).then();
     }
   }
@@ -200,14 +201,21 @@ export class KdService implements OnApplicationBootstrap {
       return;
     }
 
+    this.logger.debug(`Processing feed...`);
+
     const lastProcessedItemIndex = feed.findIndex(item => item.id === this.kdConfig.lastProcessedFeedId);
+
     const newFeedItems = lastProcessedItemIndex === -1
       ? feed
       : feed.slice(0, lastProcessedItemIndex);
 
+    this.logger.debug({ lastProcessedItemIndex, newFeedItems });
+
     const newFeedDcnItems = newFeedItems
       .filter(feedItem => feedItem.id.startsWith(`dcn_`) && feedItem.description.includes(config.address))
       .reverse();
+
+    this.logger.debug({ newFeedDcnItems });
 
     for (const newFeedDcnItem of newFeedDcnItems) {
       const createdDate = new Date(newFeedDcnItem.created_at * 1000);
