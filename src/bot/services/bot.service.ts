@@ -72,6 +72,8 @@ export class BotService implements OnApplicationBootstrap {
     if (!this.botConfig.ownerIds[0]) {
       throw new Error(`No owner ID configured`);
     }
+
+    // this.execMethod('deleteMessages' as any, { chat_id: -1001392103291, message_ids: [71664, 71663, 71662, 71661, 71660, 71659, 71658, 71657, 71656, 71655] })
   }
 
   async onNewIncomingMessage(message: ITelegramMessage): Promise<void> {
@@ -215,6 +217,9 @@ export class BotService implements OnApplicationBootstrap {
       }
 
       this.logger.debug(`Executing method finished`);
+      if (!response.data.result) {
+        this.logger.warn({ 'response.data': response.data });
+      }
 
       return response.data.result;
     } catch (error) {
@@ -278,20 +283,25 @@ export class BotService implements OnApplicationBootstrap {
   private async persistSentMessages(sentMessages: ITelegramMessage[]): Promise<void> {
     for (const sentMessage of sentMessages) {
       if (!sentMessage) {
-        const message = `Not sent message to persist`;
+        const message = `No sent message to persist`;
         this.logger.error(message);
         this.sendMessageToOwner(new BotMessageText(message)).then();
         continue;
       }
 
       try {
-        await this.botSentMessageModel.create({
+        const sentMessageDocContents: BotSentMessage = {
           messageId: sentMessage.message_id,
           chatId: sentMessage.chat.id,
           messageThreadId: sentMessage.message_thread_id,
           text: sentMessage.text,
           sentAtIso: new Date(sentMessage.date * 1000).toISOString(),
-        });
+        };
+
+        await this.botSentMessageModel.create(sentMessageDocContents);
+
+        this.logger.debug(`Persisted sent message:`);
+        this.logger.debug(sentMessageDocContents);
       } catch (e) {
         this.logger.error(`Could not persist sent message:`);
         this.logger.error(e);

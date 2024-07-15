@@ -6,9 +6,10 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { BotService, PendingMessageType } from '../../bot/services/bot.service';
 import { config } from '../../config';
-import { IFeedResponse } from '../interfaces/feed-response.interface';
+import { IFeedItem, IFeedResponse } from '../interfaces/feed-response.interface';
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
 import { AxiosResponse } from 'axios';
+import { KdProcessedFeedItem } from '../schemas/kd-processed-feed-item.schema';
 
 // login method 0 - sms, input 4 digits
 // login method 1 - incoming call, input last 3 digits of phone number
@@ -23,12 +24,14 @@ export class KdService implements OnApplicationBootstrap {
     count: 0,
     limitsLeft: new Set(),
   };
+  private cachedProcessedFeedItemIds: string[] = [];
 
   private readonly phoneNumber = config.phoneNumber;
   private readonly apiHost = `https://kyiv.digital/api`; // https://stage.kyiv.digital/api
 
   constructor(
     @InjectModel(KdConfig.name) private kdConfigModel: Model<KdConfig>,
+    @InjectModel(KdProcessedFeedItem.name) private kdProcessedFeedItemModel: Model<KdProcessedFeedItem>,
     private readonly httpService: HttpService,
     private readonly botService: BotService,
   ) {
@@ -50,6 +53,7 @@ export class KdService implements OnApplicationBootstrap {
 
     try {
       await this.ensureAndCacheConfig();
+      await this.cacheProcessedFeedItems();
       await this.validatePersistedToken();
       await this.getFeed();
     } catch (e) {
@@ -66,7 +70,7 @@ export class KdService implements OnApplicationBootstrap {
 
     this.kdConfig = new KdConfig();
     this.kdConfig.accessToken = null;
-    this.kdConfig.lastProcessedFeedId = null;
+    this.kdConfig.lastProcessedFeedItemCreatedAtIso = null;
     await this.kdConfigModel.create(this.kdConfig);
   }
 
@@ -185,54 +189,66 @@ export class KdService implements OnApplicationBootstrap {
   }
 
   private async persistConfig(): Promise<void> {
+    this.logger.debug(`Persisting config...`);
+    this.logger.debug(this.kdConfig);
+
     await this.kdConfigModel.findOneAndUpdate({}, this.kdConfig);
+
+    this.logger.debug(`Persisting config finished`);
   }
 
   private async processFeed(feedResponse: IFeedResponse): Promise<void> {
     const feed = feedResponse.feed.data;
-    const firstFeedItem = feed[0];
-    if (!firstFeedItem) {
+    if (feed.length === 0) {
       this.logger.warn(`No feed items`);
       await this.botService.sendMessageToOwner(new BotMessageText(`No feed items`));
       return;
     }
 
-    if (this.kdConfig.lastProcessedFeedId === firstFeedItem.id) {
-      return;
-    }
-
-    this.logger.debug(`Processing feed...`);
-
-    const lastProcessedItemIndex = feed.findIndex(item => item.id === this.kdConfig.lastProcessedFeedId);
-
-    const newFeedItems = lastProcessedItemIndex === -1
-      ? feed
-      : feed.slice(0, lastProcessedItemIndex);
-
-    this.logger.debug({ lastProcessedItemIndex, newFeedItems });
-
-    const newFeedDcnItems = newFeedItems
+    const feedDcnItems = feed
       .filter(feedItem => feedItem.id.startsWith(`dcn_`) && feedItem.description.includes(config.address))
       .reverse();
 
-    this.logger.debug({ newFeedDcnItems });
+    const processedFeedItems: IFeedItem[] = [];
+    for (const feedDcnItem of feedDcnItems) {
+      if (this.cachedProcessedFeedItemIds.includes(feedDcnItem.id)) {
+        // check for already processed feed items
+        continue;
+      }
 
-    for (const newFeedDcnItem of newFeedDcnItems) {
-      const createdDate = new Date(newFeedDcnItem.created_at * 1000);
+      const createdDate = this.buildDateByItemCreatedAt(feedDcnItem.created_at);
+      const lastProcessedFeedItemCreatedAt = new Date(this.kdConfig.lastProcessedFeedItemCreatedAtIso);
+      if (createdDate < lastProcessedFeedItemCreatedAt) {
+        // double-check for already processed feed items
+
+        const message = `Failed double-check for already processed feed items, createdDate=${createdDate.toISOString()}, lastProcessedFeedItemCreatedAt=${lastProcessedFeedItemCreatedAt.toISOString()}`;
+        this.logger.error(message);
+        this.botService.sendMessageToOwner(new BotMessageText(message)).then();
+        await this.onFeedItemProcessed(feedDcnItem);
+        continue;
+      }
+
       const createdTimeFormatted = this.getFormattedTime(createdDate);
 
       const botMessageText = new BotMessageText();
       botMessageText
-        .add(BotMessageText.bold(newFeedDcnItem.title))
+        .add(BotMessageText.bold(feedDcnItem.title))
         .add(BotMessageText.bold(`, ${createdTimeFormatted}`))
         .newLine()
-        .addLine(newFeedDcnItem.description);
+        .addLine(feedDcnItem.description);
 
+      await this.onFeedItemProcessed(feedDcnItem);
       await this.botService.sendMessageToAllGroups(botMessageText);
+
+      this.kdConfig.lastProcessedFeedItemCreatedAtIso = createdDate.toISOString();
+      processedFeedItems.push(feedDcnItem);
     }
 
-    this.kdConfig.lastProcessedFeedId = firstFeedItem.id;
-    this.logger.debug(`Processed ${newFeedDcnItems.length} new feed items, lastProcessedFeedId=${this.kdConfig.lastProcessedFeedId}`);
+    if (processedFeedItems.length === 0) {
+      return;
+    }
+
+    this.logger.debug(`Processing feed finished, items count=${processedFeedItems.length}`);
     await this.persistConfig();
   }
 
@@ -247,5 +263,35 @@ export class KdService implements OnApplicationBootstrap {
     return timeParts
       .map(pad)
       .join(':');
+  }
+
+  private async cacheProcessedFeedItems(): Promise<void> {
+    this.logger.debug(`Caching processed feed item ids...`);
+
+    const processedFeedItems = await this.kdProcessedFeedItemModel.find().exec();
+    this.cachedProcessedFeedItemIds = processedFeedItems.map(feedItem => feedItem.id);
+
+    this.logger.debug(`Caching processed feed item id finished, count=${this.cachedProcessedFeedItemIds.length}`);
+  }
+
+  private async onFeedItemProcessed(feedDcnItem: IFeedItem): Promise<void> {
+    this.logger.debug(`On feed item processed...`);
+
+    const processedFeedItem: KdProcessedFeedItem = {
+      id: feedDcnItem.id,
+      title: feedDcnItem.title,
+      description: feedDcnItem.description,
+      createdAtIso: this.buildDateByItemCreatedAt(feedDcnItem.created_at).toISOString(),
+    };
+
+    this.cachedProcessedFeedItemIds.push(processedFeedItem.id);
+    await this.kdProcessedFeedItemModel.create(processedFeedItem);
+
+    this.logger.debug(`On feed item processed finished:`);
+    this.logger.debug({ processedFeedItem });
+  }
+
+  private buildDateByItemCreatedAt(created_at: number): Date {
+    return new Date(created_at * 1000);
   }
 }

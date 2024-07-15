@@ -6,7 +6,7 @@ export class KdConfig {
   accessToken: string;
 
   @Prop()
-  lastProcessedFeedId: string;
+  lastProcessedFeedItemCreatedAtIso: string;
 }
 
 export const KdConfigSchema = SchemaFactory.createForClass(KdConfig);
