@@ -189,7 +189,7 @@ export class BotService implements OnApplicationBootstrap {
     const websiteOrigin = `https://64b5-193-194-107-76.ngrok-free.app`;
     // const websiteOrigin = `https://klondike.com.ua`;
 
-    const webhookUrl = `${websiteOrigin}/api/v1/bot/tg-webhook`;
+    const webhookUrl = `${websiteOrigin}/brama-bot/api/v1/bot/tg-webhook`;
     const payload = {
       url: webhookUrl,
     };

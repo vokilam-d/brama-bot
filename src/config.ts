@@ -6,5 +6,5 @@ export const config = {
   botToken: process.env.BOT_TOKEN,
   phoneNumber: process.env.PHONE_NUMBER,
   address: process.env.ADDRESS,
-  kdFeedRequestTimeout: 20 * 1000 // 30 sec
+  kdFeedRequestTimeout: 15 * 1000 // 15 sec
 };
