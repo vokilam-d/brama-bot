@@ -14,5 +14,7 @@ export class BotController {
     if (update.message?.reply_to_message) {
       this.botService.onReply(update.message).then();
     }
+
+    this.botService.onNewIncomingMessage(update.message).then();
   }
 }

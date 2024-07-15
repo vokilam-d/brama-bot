@@ -13,6 +13,7 @@ import { ITelegramReplyKeyboardRemove } from '../interfaces/reply-keyboard-remov
 import { ITelegramMessage } from '../interfaces/message.interface';
 import { EventEmitter } from 'events';
 import { BotSentMessage } from '../schemas/bot-sent-message.schema';
+import { BotIncomingMessage } from '../schemas/bot-incoming-message.schema';
 
 export type ReplyMarkup = ITelegramInlineKeyboardMarkup | ITelegramReplyKeyboardMarkup | ITelegramReplyKeyboardRemove;
 
@@ -53,6 +54,7 @@ export class BotService implements OnApplicationBootstrap {
   constructor(
     @InjectModel(BotConfig.name) private botConfigModel: Model<BotConfig>,
     @InjectModel(BotSentMessage.name) private botSentMessageModel: Model<BotSentMessage>,
+    @InjectModel(BotIncomingMessage.name) private botIncomingMessageModel: Model<BotIncomingMessage>,
     private readonly httpService: HttpService,
   ) {
   }
@@ -69,6 +71,15 @@ export class BotService implements OnApplicationBootstrap {
 
     if (!this.botConfig.ownerIds[0]) {
       throw new Error(`No owner ID configured`);
+    }
+  }
+
+  async onNewIncomingMessage(message: ITelegramMessage): Promise<void> {
+    try {
+      await this.botIncomingMessageModel.create({ message });
+    } catch (e) {
+      this.logger.error(`Could not create incoming message:`);
+      this.logger.error(e);
     }
   }
 
