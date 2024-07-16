@@ -8,7 +8,7 @@ import { BotService, PendingMessageType } from '../../bot/services/bot.service';
 import { config } from '../../config';
 import { IFeedItem, IFeedResponse } from '../interfaces/feed-response.interface';
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
-import { AxiosResponse } from 'axios';
+import { AxiosError, AxiosResponse } from 'axios';
 import { KdProcessedFeedItem } from '../schemas/kd-processed-feed-item.schema';
 
 // login method 0 - sms, input 4 digits
@@ -57,8 +57,7 @@ export class KdService implements OnApplicationBootstrap {
       await this.validatePersistedToken();
       await this.getFeed();
     } catch (e) {
-      this.logger.error(`Could not init:`);
-      this.logger.error(e, e.stack);
+      this.onError(e, `Could not init`);
     }
   }
 
@@ -86,8 +85,7 @@ export class KdService implements OnApplicationBootstrap {
 
       this.logger.debug(`Validating persisted token finished, accessToken=${this.kdConfig.accessToken}`);
     } catch (e) {
-      this.logger.error(`Could not validate persisted token:`);
-      this.logger.error(e, e.stack);
+      this.onError(e, `Could not validate persisted token`);
     }
   }
 
@@ -123,7 +121,9 @@ export class KdService implements OnApplicationBootstrap {
 
   private async getFeed(): Promise<void> {
     if (!this.kdConfig.accessToken) {
-      this.logger.error(`Could not get feed: no access token`);
+      const message = `Could not get feed: no access token`;
+      this.logger.error(message);
+      this.botService.sendMessageToOwner(new BotMessageText(message)).then();
       return;
     }
 
@@ -158,9 +158,15 @@ export class KdService implements OnApplicationBootstrap {
     try {
       response = await firstValueFrom(this.httpService.request<IFeedResponse>(urlConfig));
     } catch (e) {
-      this.logger.error(`Could not get feed:`);
-      this.logger.error(e, e.stack);
-      this.botService.sendMessageToOwner(new BotMessageText(`Could not get feed: ${e}`)).then();
+      this.onError(e, `Could not get feed`);
+
+      const noAuthStatuses = [401, 403];
+      if (!noAuthStatuses.includes((e as AxiosError).response?.status)) {
+        const nextRequestDelay = config.kdFeedRequestTimeout * 5;
+        this.logger.debug(`Re-fetching feed in "${nextRequestDelay / 1000} sec"...`);
+        setTimeout(() => this.getFeed(), config.kdFeedRequestTimeout * 10);
+      }
+
       return;
     }
 
@@ -182,9 +188,7 @@ export class KdService implements OnApplicationBootstrap {
       setTimeout(() => this.getFeed(), nextRequestDelay);
 
     } catch (e) {
-      this.logger.error(`Could not process feed:`);
-      this.logger.error(e, e.stack);
-      this.botService.sendMessageToOwner(new BotMessageText(`Could not process feed: ${e}`)).then();
+      this.onError(e, `Could not process feed`);
     }
   }
 
@@ -293,5 +297,21 @@ export class KdService implements OnApplicationBootstrap {
 
   private buildDateByItemCreatedAt(created_at: number): Date {
     return new Date(created_at * 1000);
+  }
+
+  private onError(error: AxiosError, description: string) {
+    this.logger.error(description);
+
+    let message: string = error.message;
+    if (error.isAxiosError) {
+      message = `${error.code}, ${error.message}, ${error.response.status}, ${error.response.statusText}`;
+    }
+
+    this.logger.error(message, error.stack);
+    if (error.isAxiosError) {
+      this.logger.error(error.response.data);
+    }
+
+    this.botService.sendMessageToOwner(new BotMessageText(`${description}: ${message}`)).then();
   }
 }
