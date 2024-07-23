@@ -49,7 +49,7 @@ export class KdService implements OnApplicationBootstrap {
       });
       this.feedRequestsCounter.count = 0;
       this.feedRequestsCounter.limitsLeft.clear();
-    }, config.kdFeedRequestTimeout * 60);
+    }, config.kdFeedRequestTimeout * 360);
 
     try {
       await this.ensureAndCacheConfig();
