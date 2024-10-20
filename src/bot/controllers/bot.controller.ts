@@ -9,8 +9,6 @@ export class BotController {
 
   @Post('tg-webhook')
   async tgWebhook(@Body() update: ITelegramUpdate): Promise<void> {
-    console.dir({ update }, { depth: 10 });
-
     if (update.message?.reply_to_message) {
       this.botService.onReply(update.message).then();
     }

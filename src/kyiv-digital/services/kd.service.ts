@@ -43,10 +43,12 @@ export class KdService implements OnApplicationBootstrap {
     });
 
     setInterval(() => {
-      this.logger.debug({
-        count: this.feedRequestsCounter.count,
-        limitsLeft: [...this.feedRequestsCounter.limitsLeft.values()],
-      });
+      if (Object.values(this.feedRequestsCounter.limitsLeft.values()).some(limit => limit < 56)) {
+        this.logger.warn({
+          count: this.feedRequestsCounter.count,
+          limitsLeft: [...this.feedRequestsCounter.limitsLeft.values()],
+        });
+      }
       this.feedRequestsCounter.count = 0;
       this.feedRequestsCounter.limitsLeft.clear();
     }, config.kdFeedRequestTimeout * 360);
@@ -304,12 +306,12 @@ export class KdService implements OnApplicationBootstrap {
 
     let message: string = error.message;
     if (error.isAxiosError) {
-      message = `${error.code}, ${error.message}, ${error.response.status}, ${error.response.statusText}`;
+      message = `${error.code}, ${error.message}, ${error.response?.status}, ${error.response?.statusText}`;
     }
 
     this.logger.error(message, error.stack);
     if (error.isAxiosError) {
-      this.logger.error(error.response.data);
+      this.logger.error(error.response?.data);
     }
 
     this.botService.sendMessageToOwner(new BotMessageText(`${description}: ${message}`)).then();

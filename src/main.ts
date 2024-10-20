@@ -9,7 +9,7 @@ const logger = new Logger('main.ts');
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter()
+    new FastifyAdapter(),
   );
   app.setGlobalPrefix(`/brama-bot/api/v1`);
 
@@ -17,4 +17,4 @@ async function bootstrap() {
 
   logger.log(`Server running on port ${config.port}`);
 }
-bootstrap();
+bootstrap().then();

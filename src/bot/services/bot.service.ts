@@ -79,6 +79,8 @@ export class BotService implements OnApplicationBootstrap {
   async onNewIncomingMessage(message: ITelegramMessage): Promise<void> {
     try {
       await this.botIncomingMessageModel.create({ message });
+
+      await this.sendMessageToOwner(new BotMessageText(BotMessageText.code(JSON.stringify(message), 'json')));
     } catch (e) {
       this.logger.error(`Could not create incoming message:`);
       this.logger.error(e);
