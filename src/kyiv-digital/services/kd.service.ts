@@ -244,7 +244,7 @@ export class KdService implements OnApplicationBootstrap {
         .addLine(feedDcnItem.description);
 
       await this.onFeedItemProcessed(feedDcnItem);
-      await this.botService.sendMessageToAllGroups(botMessageText);
+      await this.botService.sendMessageToAllEnabledGroups(botMessageText);
 
       this.kdConfig.lastProcessedFeedItemCreatedAtIso = createdDate.toISOString();
       processedFeedItems.push(feedDcnItem);

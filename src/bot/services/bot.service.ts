@@ -119,10 +119,14 @@ export class BotService implements OnApplicationBootstrap {
     this.logger.debug(`Asking for code finished`);
   }
 
-  async sendMessageToAllGroups(
+  async sendMessageToAllEnabledGroups(
     text: BotMessageText,
   ): Promise<void> {
     for (const group of this.botConfig.groups) {
+      if (!group.isEnabled) {
+        continue;
+      }
+
       try {
         await this.sendMessage(group.id, text, { messageThreadId: group.threadId });
       } catch (e) {

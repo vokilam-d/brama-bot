@@ -6,6 +6,9 @@ export enum BotMessageGroupType {
 }
 
 export class BotMessageGroup {
+  @Prop()
+  isEnabled: boolean;
+
   @Prop({ enum: BotMessageGroupType })
   type: BotMessageGroupType;
 
@@ -14,15 +17,18 @@ export class BotMessageGroup {
 
   @Prop()
   threadId?: number;
+
+  @Prop()
+  comment: string;
 }
 
 @Schema()
 export class BotConfig {
   @Prop([Number])
-  ownerIds: number[];
+  ownerIds: number[] = [];
 
   @Prop([BotMessageGroup])
-  groups: BotMessageGroup[];
+  groups: BotMessageGroup[] = [];
 }
 
 export const BotConfigSchema = SchemaFactory.createForClass(BotConfig);
