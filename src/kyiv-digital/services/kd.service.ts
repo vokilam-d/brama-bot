@@ -190,7 +190,7 @@ export class KdService implements OnApplicationBootstrap {
       setTimeout(() => this.getFeed(), nextRequestDelay);
 
     } catch (e) {
-      this.onError(e, `Could not process feed`);
+      this.onError(e, `CRITICAL - Could not process feed`);
     }
   }
 
@@ -204,6 +204,13 @@ export class KdService implements OnApplicationBootstrap {
   }
 
   private async processFeed(feedResponse: IFeedResponse): Promise<void> {
+    if (!feedResponse.feed) {
+      this.logger.warn(`No feed in response`);
+      this.logger.debug(feedResponse);
+      await this.botService.sendMessageToOwner(new BotMessageText(`No feed in response`));
+      return;
+    }
+
     const feed = feedResponse.feed.data;
     if (feed.length === 0) {
       this.logger.warn(`No feed items`);
