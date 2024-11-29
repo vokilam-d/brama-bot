@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { HttpService } from '@nestjs/axios';
 import { BotConfig } from '../schemas/bot-config.schema';
-import { config } from '../../config';
+import { config } from '../../../config';
 import { firstValueFrom } from 'rxjs';
 import { BotMessageText } from '../helpers/bot-message-text.helper';
 import { ITelegramReplyParameters } from '../interfaces/telegram-reply-parameters.interface';

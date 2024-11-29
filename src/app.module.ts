@@ -1,10 +1,10 @@
 import { Logger, Module, OnApplicationBootstrap } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { config } from './config';
-import { KdModule } from './kyiv-digital/kd.module';
-import { BotModule } from './bot/bot.module';
-import { BotService } from './bot/services/bot.service';
-import { BotMessageText } from './bot/helpers/bot-message-text.helper';
+import { KdModule } from './modules/kyiv-digital/kd.module';
+import { BotModule } from './modules/bot/bot.module';
+import { BotService } from './modules/bot/services/bot.service';
+import { BotMessageText } from './modules/bot/helpers/bot-message-text.helper';
 
 @Module({
   imports: [

@@ -55,8 +55,9 @@ export class BotMessageText {
   }
 
   merge(messageTextToAdd: BotMessageText): this {
-    const messageTextLinesToAdd = messageTextToAdd.toString().split(BotMessageText.newLineSeparator);
-    this.messageTextLines.push(...messageTextLinesToAdd);
+    const [firstLine, ...restLines] = messageTextToAdd.textLines;
+    this.add(firstLine);
+    this.messageTextLines.push(...restLines);
     return this;
   }
 
@@ -73,6 +74,10 @@ export class BotMessageText {
 
   get length(): number {
     return this.toString().length;
+  }
+
+  get textLines(): string[] {
+    return this.messageTextLines;
   }
 
   toString(): string {
