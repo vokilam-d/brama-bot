@@ -277,7 +277,7 @@ export class KdService implements OnApplicationBootstrap {
     await this.persistConfig();
   }
 
-  private async getSchedule(): Promise<IScheduleItem[]> {
+  private async getSchedule(tryCount: number = 1): Promise<IScheduleItem[]> {
     const url = `${this.apiHost}/v3/dtek/${config.dtekObjectId}`;
     const requestConfig = this.buildRequestConfig('get', url);
 
@@ -288,11 +288,11 @@ export class KdService implements OnApplicationBootstrap {
       this.onError(e, `Could not get schedule`);
 
       const noAuthStatuses = [401, 403];
-      if (!noAuthStatuses.includes((e as AxiosError).response?.status)) {
+      if (tryCount <= 3 && !noAuthStatuses.includes((e as AxiosError).response?.status)) {
         const nextRequestDelay = config.kdFeedRequestTimeout * 5;
         this.logger.warn(`Re-fetching schedule in "${nextRequestDelay / 1000} sec"...`);
         await wait(config.kdFeedRequestTimeout * 10);
-        return this.getSchedule();
+        return this.getSchedule(tryCount + 1);
       }
 
       return;
