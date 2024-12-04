@@ -256,13 +256,13 @@ export class KdService implements OnApplicationBootstrap {
           continue;
         }
 
-        botMessageText.merge(this.addScheduleToMessage(weekSchedule, createdDate, 'Сьогодні'));
+        botMessageText.merge(this.buildDayScheduleMessage(weekSchedule, createdDate, 'Сьогодні'));
 
         if (createdDate.getHours() > 18) {
           botMessageText.addLine('');
           const tomorrowDate = new Date(createdDate);
           tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-          botMessageText.merge(this.addScheduleToMessage(weekSchedule, tomorrowDate, 'Завтра'));
+          botMessageText.merge(this.buildDayScheduleMessage(weekSchedule, tomorrowDate, 'Завтра'));
         }
       }
 
@@ -385,7 +385,7 @@ export class KdService implements OnApplicationBootstrap {
     this.botService.sendMessageToOwner(new BotMessageText(`${description}: ${message}`)).then();
   }
 
-  private addScheduleToMessage(
+  private buildDayScheduleMessage(
     weekSchedule: IScheduleItem[],
     date: Date,
     prefix: string,
