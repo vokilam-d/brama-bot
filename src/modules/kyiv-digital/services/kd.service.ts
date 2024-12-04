@@ -258,7 +258,7 @@ export class KdService implements OnApplicationBootstrap {
 
         botMessageText.merge(this.addScheduleToMessage(weekSchedule, createdDate, 'Сьогодні'));
 
-        if (createdDate.getHours() > 15) {
+        if (createdDate.getHours() > 18) {
           botMessageText.addLine('');
           const tomorrowDate = new Date(createdDate);
           tomorrowDate.setDate(tomorrowDate.getDate() + 1);
