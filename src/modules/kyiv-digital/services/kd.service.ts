@@ -18,8 +18,7 @@ import { pad } from '../../../helpers/pad.function';
 // login method 1 - incoming call, input last 3 digits of phone number
 
 enum FeedItemIdPrefix {
-  POWER_TOGGLE = 'dcn_',
-  SCHEDULE = 'cmp_',
+  POWER = 'dcn_',
 }
 
 @Injectable()
@@ -205,12 +204,7 @@ export class KdService implements OnApplicationBootstrap {
     }
 
     const relevantFeedItems = feed
-      .filter(feedItem => {
-        const isPowerToggle = feedItem.id.startsWith(FeedItemIdPrefix.POWER_TOGGLE)
-          && feedItem.description.includes(config.address);
-        const isSchedule = feedItem.id.startsWith(FeedItemIdPrefix.SCHEDULE) && feedItem.title === `Графік оновився`;
-        return isPowerToggle || isSchedule;
-      })
+      .filter(feedItem => feedItem.id.startsWith(FeedItemIdPrefix.POWER))
       .reverse();
 
     const processedFeedItems: IFeedItem[] = [];
@@ -237,8 +231,9 @@ export class KdService implements OnApplicationBootstrap {
 
       const createdTimeFormatted = this.getFormattedTime(createdDate);
       const botMessageText = new BotMessageText();
-      const isPowerToggle = feedItem.id.startsWith(FeedItemIdPrefix.POWER_TOGGLE);
-      const isSchedule = feedItem.id.startsWith(FeedItemIdPrefix.SCHEDULE);
+      const isPowerToggle = feedItem.title.includes(`Стабілізаційне відключення`)
+        || feedItem.title.includes(`Світло повертається`);
+      const isSchedule = feedItem.title === `Графік на завтра`;
 
       botMessageText
         .add(BotMessageText.bold(feedItem.title))
@@ -256,14 +251,9 @@ export class KdService implements OnApplicationBootstrap {
           continue;
         }
 
-        botMessageText.merge(this.buildDayScheduleMessage(weekSchedule, createdDate, 'Сьогодні'));
-
-        if (createdDate.getHours() > 18) {
-          botMessageText.addLine('');
-          const tomorrowDate = new Date(createdDate);
-          tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-          botMessageText.merge(this.buildDayScheduleMessage(weekSchedule, tomorrowDate, 'Завтра'));
-        }
+        const tomorrowDate = new Date(createdDate);
+        tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+        botMessageText.merge(this.buildDayScheduleMessage(weekSchedule, tomorrowDate));
       }
 
       await this.botService.sendMessageToAllEnabledGroups(botMessageText);
@@ -388,7 +378,6 @@ export class KdService implements OnApplicationBootstrap {
   private buildDayScheduleMessage(
     weekSchedule: IScheduleItem[],
     date: Date,
-    prefix: string,
   ): BotMessageText {
     const botMessageText = new BotMessageText();
 
@@ -414,15 +403,9 @@ export class KdService implements OnApplicationBootstrap {
         }
       }
     });
-    const DAY_OF_WEEK_STR = [null, 'пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
-
-    botMessageText.add(`${prefix} (${DAY_OF_WEEK_STR[day]})`);
-    if (offHourRanges.length) {
-      botMessageText.add(`, світло буде відсутнє`);
-    }
-    botMessageText.add(':')
 
     if (offHourRanges.length) {
+      botMessageText.addLine(`Світло буде відсутнє:`);
       for (let [startHour, endHour] of offHourRanges) { // eslint-disable-line prefer-const
         if (!endHour) {
           endHour = startHour;
