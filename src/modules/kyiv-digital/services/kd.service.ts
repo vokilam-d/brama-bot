@@ -233,7 +233,8 @@ export class KdService implements OnApplicationBootstrap {
       const botMessageText = new BotMessageText();
       const isPowerToggle = feedItem.title.includes(`Стабілізаційне відключення`)
         || feedItem.title.includes(`Світло повертається`);
-      const isSchedule = feedItem.title === `Графік на завтра`;
+      const isScheduleToday = feedItem.title === `Новий графік`;
+      const isScheduleTomorrow = feedItem.title === `Графік на завтра`;
 
       botMessageText
         .add(BotMessageText.bold(feedItem.title))
@@ -242,7 +243,7 @@ export class KdService implements OnApplicationBootstrap {
 
       if (isPowerToggle) {
         botMessageText.addLine(feedItem.description);
-      } else if (isSchedule) {
+      } else if (isScheduleToday || isScheduleTomorrow) {
         botMessageText.prependToFirstLine('🗓 ');
 
         const weekSchedule = await this.getSchedule();
@@ -251,9 +252,15 @@ export class KdService implements OnApplicationBootstrap {
           continue;
         }
 
-        const tomorrowDate = new Date(createdDate);
-        tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-        botMessageText.merge(this.buildDayScheduleMessage(weekSchedule, tomorrowDate));
+        if (isScheduleToday) {
+          botMessageText.merge(this.buildDayScheduleMessage(weekSchedule, createdDate));
+        } else if (isScheduleTomorrow) {
+          const tomorrowDate = new Date(createdDate);
+          tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+          botMessageText.merge(this.buildDayScheduleMessage(weekSchedule, tomorrowDate));
+        }
+      } else {
+        continue;
       }
 
       await this.botService.sendMessageToAllEnabledGroups(botMessageText);
