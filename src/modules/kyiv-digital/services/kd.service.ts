@@ -10,7 +10,7 @@ import { IFeedItem, IFeedResponse } from '../interfaces/feed-response.interface'
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
 import { AxiosError, AxiosResponse } from 'axios';
 import { KdProcessedFeedItem } from '../schemas/kd-processed-feed-item.schema';
-import { IScheduleItem, IScheduleResponse } from '../interfaces/schedule-response.interface';
+import { IScheduleItem, IScheduleResponse, ScheduleHourType } from '../interfaces/schedule-response.interface';
 import { wait } from '../../../helpers/wait.function';
 import { pad } from '../../../helpers/pad.function';
 
@@ -19,6 +19,11 @@ import { pad } from '../../../helpers/pad.function';
 
 enum FeedItemIdPrefix {
   POWER = 'dcn_',
+}
+
+interface ScheduleHour {
+  hour: number;
+  type: ScheduleHourType;
 }
 
 @Injectable()
@@ -393,31 +398,50 @@ export class KdService implements OnApplicationBootstrap {
       day = 7;
     }
     const daySchedule = weekSchedule[day - 1];
-    const offHourRanges: number[][] = [];
+    const offHourRanges: [ScheduleHour, ScheduleHour][] = [];
 
     Object.keys(daySchedule.hours).sort().forEach((_hourName, index, hourNames) => {
-      const isHourOff = (indexArg: number): boolean => {
-        return daySchedule.hours[hourNames[indexArg]] === 2;
+      const getHourType = (indexArg: number): ScheduleHourType => {
+        return daySchedule.hours[hourNames[indexArg]];
       };
+      const hourType = getHourType(index);
+      const prevHourType = getHourType(index - 1);
 
-      if (isHourOff(index)) {
-        const isPrevHourOff = index > 0 ? isHourOff(index - 1) : false;
+      if (hourType === ScheduleHourType.Off || hourType === ScheduleHourType.Half) {
+        const isPrevHourOn = index === 0 ? true : prevHourType === ScheduleHourType.On;
 
-        if (isPrevHourOff) {
-          offHourRanges[offHourRanges.length - 1][1] = index;
+        const scheduleHour: ScheduleHour = { hour: index, type: hourType };
+        if (isPrevHourOn) {
+          offHourRanges.push([scheduleHour, scheduleHour]);
         } else {
-          offHourRanges.push([index]);
+          offHourRanges[offHourRanges.length - 1][1] = scheduleHour;
         }
       }
     });
 
     if (offHourRanges.length) {
       botMessageText.addLine(`Світло буде відсутнє:`);
-      for (let [startHour, endHour] of offHourRanges) { // eslint-disable-line prefer-const
-        if (!endHour) {
-          endHour = startHour;
+
+      for (let [start, end] of offHourRanges) { // eslint-disable-line prefer-const
+        const addHourText = (scheduleHour: ScheduleHour): void => {
+          botMessageText.add(pad(scheduleHour.hour));
+          if (scheduleHour.type === ScheduleHourType.Off) {
+            botMessageText.add(`:00`);
+          } else if (scheduleHour.type === ScheduleHourType.Half) {
+            botMessageText.add(`:30`);
+          }
+        };
+
+        botMessageText.add(`з `);
+        addHourText(start);
+
+        botMessageText.add(` до `);
+        if (end.type === ScheduleHourType.Off) {
+          end.hour += 1;
         }
-        botMessageText.addLine(`з ${pad(startHour)}:00 до ${pad(endHour + 1)}:00`);
+        addHourText(end);
+
+        botMessageText.newLine();
       }
 
     } else {
