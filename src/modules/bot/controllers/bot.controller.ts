@@ -13,6 +13,6 @@ export class BotController {
       this.botService.onReply(update.message).then();
     }
 
-    this.botService.onNewIncomingMessage(update.message).then();
+    this.botService.onNewIncomingMessage(update).then();
   }
 }

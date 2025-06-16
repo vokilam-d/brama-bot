@@ -14,6 +14,7 @@ import { ITelegramMessage } from '../interfaces/message.interface';
 import { EventEmitter } from 'events';
 import { BotSentMessage } from '../schemas/bot-sent-message.schema';
 import { BotIncomingMessage } from '../schemas/bot-incoming-message.schema';
+import { ITelegramUpdate } from '../interfaces/telegram-update.interface';
 
 export type ReplyMarkup = ITelegramInlineKeyboardMarkup | ITelegramReplyKeyboardMarkup | ITelegramReplyKeyboardRemove;
 
@@ -76,7 +77,12 @@ export class BotService implements OnApplicationBootstrap {
     // this.execMethod('deleteMessages' as any, { chat_id: -1001392103291, message_ids: [71664, 71663, 71662, 71661, 71660, 71659, 71658, 71657, 71656, 71655] })
   }
 
-  async onNewIncomingMessage(message: ITelegramMessage): Promise<void> {
+  async onNewIncomingMessage(update: ITelegramUpdate): Promise<void> {
+    if (update.message?.new_chat_members) {
+      return;
+    }
+
+    const message = update.message || update;
     try {
       await this.botIncomingMessageModel.create({ message });
 
