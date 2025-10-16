@@ -237,7 +237,8 @@ export class KdService implements OnApplicationBootstrap {
       const createdTimeFormatted = this.getFormattedTime(createdDate);
       const botMessageText = new BotMessageText();
       const isPowerToggle = feedItem.title.includes(`Стабілізаційне відключення`)
-        || feedItem.title.includes(`Світло повертається`);
+        || feedItem.title.includes(`Світло повертається`)
+        || feedItem.title.includes(`Графік не діє`);
       const isScheduleToday = feedItem.title === `Новий графік`;
       const isScheduleTomorrow = feedItem.title === `Графік на завтра`;
 
