@@ -35,6 +35,13 @@ export enum PendingMessageType {
   askForCode = 'askForCode',
 }
 
+enum BotCommand {
+  Enable = '/enable',
+  Disable = '/disable',
+  Status = '/status',
+  SetGroupStatus = '/set_group_status',
+}
+
 @Injectable()
 export class BotService implements OnApplicationBootstrap {
 
@@ -63,12 +70,7 @@ export class BotService implements OnApplicationBootstrap {
   async onApplicationBootstrap(): Promise<void> {
     // this.setWebhook();
 
-    try {
-      await this.ensureAndCacheConfig();
-    } catch (e) {
-      this.logger.error(`Could not init:`);
-      this.logger.error(e);
-    }
+    await this.ensureAndCacheConfig();
 
     if (!this.botConfig.ownerIds[0]) {
       throw new Error(`No owner ID configured`);
@@ -78,22 +80,103 @@ export class BotService implements OnApplicationBootstrap {
   }
 
   async onNewIncomingMessage(update: ITelegramUpdate): Promise<void> {
-    if (update.message?.new_chat_members) {
-      return;
-    }
+    const senderId = update.message?.from?.id;
 
-    const message = update.message || update;
-    try {
-      await this.botIncomingMessageModel.create({ message });
+    if (update.message?.reply_to_message) {
+      this.onReply(update.message).then();
+    } else if (this.botConfig.ownerIds.includes(senderId) && update.message?.chat?.type === 'private') {
+      this.onOwnerMessage(update.message).then();
+    } else {
+      if (update.message?.text === '/start' && update.message.chat.type === 'private') {
+        const text = new BotMessageText(`Вітаю! Я бот для сповіщень від "Київ Цифровий" щодо відключень світла на вул. Юлії Здановської, 71-з.`)
+          .newLine()
+          .addLine(`Для отримання сповіщень, можете підписатись на канал: ${BotMessageText.link({ url: 'https://t.me/brama_kyiv_digital' }, 't.me/brama_kyiv_digital')}.`)
+          .newLine()
+          .addLine(`Або якщо Ви бажаєте отримувати сповіщення у власній групі, будь ласка, зверніться до адміністратора бота ${BotMessageText.link({ userId: this.botConfig.ownerIds[0] }, '@vokilam')}`);
 
-      await this.sendMessageToOwner(new BotMessageText(BotMessageText.code(JSON.stringify(message), 'json')));
-    } catch (e) {
-      this.logger.error(`Could not create incoming message:`);
-      this.logger.error(e);
+        await this.sendMessage(
+          update.message.chat.id,
+          text,
+        );
+      }
+
+      // Notify about every incoming message
+      if (update.message?.new_chat_members) {
+        return;
+      }
+
+      const message = update.message || update;
+      try {
+        await this.botIncomingMessageModel.create({ message });
+
+        await this.sendMessageToOwner(new BotMessageText(BotMessageText.code(JSON.stringify(message), 'json')));
+      } catch (e) {
+        this.logger.error(`Creating incoming message: Failed:`);
+        this.logger.error(e);
+      }
     }
   }
 
-  async onReply(message: ITelegramMessage): Promise<void> {
+  private async onOwnerMessage(message: ITelegramMessage): Promise<void> {
+    this.logger.debug(`Handling owner message... (message=${message.text})`);
+    const chatId = message.chat.id;
+
+    try {
+      const [command, ...args] = message.text.split(' ');
+      switch (command) {
+        case BotCommand.Enable:
+          await this.updateConfig('isEnabled', true);
+          await this.likeMessage(chatId, message.message_id);
+          await this.sendMessage(chatId, this.buildStatusText());
+          break;
+
+        case BotCommand.Disable:
+          await this.updateConfig('isEnabled', false);
+          await this.likeMessage(chatId, message.message_id);
+          await this.sendMessage(chatId, this.buildStatusText());
+          break;
+
+        case BotCommand.Status:
+          await this.sendMessage(chatId, this.buildStatusText());
+          break;
+
+        case BotCommand.SetGroupStatus:
+          const groupId = parseInt(args[0]);
+          const status = args[1];
+
+          const groupIndex = this.botConfig.groups.findIndex(group => group.id === groupId);
+          if (groupIndex === -1) {
+            await this.sendMessage(chatId, new BotMessageText(`Group not found (id=${groupId})`));
+            return;
+          }
+
+          if (status !== 'enabled' && status !== 'disabled') {
+            await this.sendMessage(chatId, new BotMessageText(`Invalid status: ${status}`));
+            return;
+          }
+
+          this.botConfig.groups[groupIndex].isEnabled = status === 'enabled';
+
+          await this.updateConfig('groups', this.botConfig.groups);
+          await this.likeMessage(chatId, message.message_id);
+          await this.sendMessage(chatId, this.buildStatusText());
+          break;
+
+        default:
+          return;
+      }
+
+      this.logger.debug(`Handling owner message: Finished`);
+    } catch (e) {
+      this.logger.error(`Handling owner message: Failed:`);
+      this.logger.error(e);
+      this.sendMessageToOwner(new BotMessageText(`Failed to handle owner message (message=${message.text}): ${e.message}`)).then();
+    }
+  }
+
+  private async onReply(message: ITelegramMessage): Promise<void> {
+    this.logger.debug(`Handling reply... (message=${message.text})`);
+
     const pendingBotMessageIndex = this.pendingMessages.findIndex(pendingMessage => {
       return pendingMessage.chatId === message.reply_to_message.chat.id
         && pendingMessage.messageId === message.reply_to_message.message_id;
@@ -128,8 +211,15 @@ export class BotService implements OnApplicationBootstrap {
   async sendMessageToAllEnabledGroups(
     text: BotMessageText,
   ): Promise<void> {
+    this.logger.debug(`Sending message to all enabled groups... (text=${text.toString()})`);
+    if (!this.botConfig.isEnabled) {
+      this.logger.debug(`Sending message to all enabled groups: Exiting, bot is disabled`);
+      return;
+    }
+
     for (const group of this.botConfig.groups) {
       if (!group.isEnabled) {
+        this.logger.debug(`Sending message to all enabled groups: Skipping disabled group (id=${group.id}, comment=${group.comment})`);
         continue;
       }
 
@@ -143,6 +233,8 @@ export class BotService implements OnApplicationBootstrap {
         this.sendMessageToOwner(new BotMessageText(message)).then();
       }
     }
+
+    this.logger.debug(`Sending message to all enabled groups: Finished`);
   }
 
   async sendMessageToOwner(
@@ -155,6 +247,16 @@ export class BotService implements OnApplicationBootstrap {
       this.logger.error(`Could not send message to owner:`);
       this.logger.error(e, e.stack);
     }
+  }
+
+  likeMessage(chatId: number, messageId: number): Promise<boolean> {
+    const payload = {
+      chat_id: chatId,
+      message_id: messageId,
+      reaction: [{ type: 'emoji', emoji: '👍' }],
+    };
+
+    return this.execMethod(ApiMethodName.SetMessageReaction, payload);
   }
 
   private async sendMessage(
@@ -275,7 +377,9 @@ export class BotService implements OnApplicationBootstrap {
     try {
       this.logger.debug(`Caching config...`);
 
-      this.botConfig = await this.botConfigModel.findOne().exec();
+      const appEnvKey: keyof BotConfig = 'appEnv';
+      const configDoc = await this.botConfigModel.findOne({ [appEnvKey]: config.appEnv }).exec();
+      this.botConfig = configDoc?.toJSON();
 
       if (!this.botConfig) {
         this.logger.debug(`Did not find bot config, creating new...`);
@@ -284,10 +388,10 @@ export class BotService implements OnApplicationBootstrap {
         await this.botConfigModel.create(this.botConfig);
       }
 
-      this.logger.debug(`Caching config finished:`);
+      this.logger.debug(`Caching config: Finished`);
       this.logger.debug(this.botConfig);
     } catch (e) {
-      this.logger.error(`Could not cache config:`);
+      this.logger.error(`Caching config: Failed:`);
       this.logger.error(e);
     }
   }
@@ -319,5 +423,44 @@ export class BotService implements OnApplicationBootstrap {
         this.logger.error(e);
       }
     }
+  }
+
+  private async updateConfig<K extends keyof BotConfig>(key: K, value: BotConfig[K]): Promise<void> {
+    this.logger.debug(`Updating config... (${key}=${value})`);
+
+    this.botConfig[key] = value;
+
+    try {
+      const appEnvKey: keyof BotConfig = 'appEnv';
+      await this.botConfigModel.findOneAndUpdate(
+        { [appEnvKey]: config.appEnv },
+        { $set: { [key]: value } },
+      );
+
+      this.logger.debug(`Updating config: Finished`);
+      this.logger.debug(this.botConfig);
+    } catch (e) {
+      this.logger.error(`Updating config: Failed:`);
+      this.logger.error(e);
+      this.sendMessageToOwner(new BotMessageText(`Failed to update config: ${e.message}`)).then();
+    }
+  }
+
+  private buildStatusText(): BotMessageText {
+    const text = new BotMessageText(`Status: ${BotMessageText.bold(this.botConfig.isEnabled ? 'enabled' : 'disabled')}`)
+      .newLine();
+
+    text.addLine(`Owner IDs: ${this.botConfig.ownerIds.map(id => BotMessageText.bold(id)).join(', ')}`)
+      .newLine();
+
+    text.addLine(`Groups:`)
+    for (let i = 0; i < this.botConfig.groups.length; i++) {
+      const group = this.botConfig.groups[i];
+      const status = group.isEnabled ? 'enabled' : 'disabled';
+      const threadId = group.threadId ? ` (threadId=${group.threadId})` : '';
+      text.addLine(` ${i + 1}. ${BotMessageText.bold(group.id)}${threadId} - ${BotMessageText.bold(status)}: "${group.comment}"`);
+    }
+
+    return text;
   }
 }

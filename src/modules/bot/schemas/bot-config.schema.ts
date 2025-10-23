@@ -29,6 +29,12 @@ export class BotConfig {
 
   @Prop([BotMessageGroup])
   groups: BotMessageGroup[] = [];
+
+  @Prop()
+  isEnabled: boolean = true;
+
+  @Prop()
+  appEnv: 'production' | 'development' = 'development';
 }
 
 export const BotConfigSchema = SchemaFactory.createForClass(BotConfig);

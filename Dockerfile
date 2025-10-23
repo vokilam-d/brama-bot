@@ -1,6 +1,6 @@
-FROM node:20.15.1-alpine as builder
+FROM node:20.15.1-alpine
 
-ENV TZ 'Europe/Kiev'
+ENV TZ="Europe/Kiev"
 
 WORKDIR /app
 
