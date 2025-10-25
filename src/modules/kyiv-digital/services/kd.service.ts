@@ -13,6 +13,7 @@ import { KdProcessedFeedItem } from '../schemas/kd-processed-feed-item.schema';
 import { IScheduleItem, IScheduleResponse, ScheduleHourType } from '../interfaces/schedule-response.interface';
 import { wait } from '../../../helpers/wait.function';
 import { pad } from '../../../helpers/pad.function';
+import { IDtekObjectsResponse } from '../interfaces/dtek-response.interface';
 
 // login method 0 - sms, input 4 digits
 // login method 1 - incoming call, input last 3 digits of phone number
@@ -37,6 +38,7 @@ export class KdService implements OnApplicationBootstrap {
     limitsLeft: new Set(),
   };
   private cachedProcessedFeedItemIds: string[] = [];
+  private isDtekObjectAvailable: boolean = true;
 
   private readonly phoneNumber = config.phoneNumber;
   private readonly apiHost = `https://kyiv.digital/api`; // https://stage.kyiv.digital/api
@@ -63,12 +65,14 @@ export class KdService implements OnApplicationBootstrap {
       }
       this.feedRequestsCounter.count = 0;
       this.feedRequestsCounter.limitsLeft.clear();
-    }, config.kdFeedRequestTimeout * 360);
+    }, config.kdFeedRequestIntervalMs * 360);
 
     try {
       await this.ensureAndCacheConfig();
       await this.cacheProcessedFeedItems();
       await this.validatePersistedToken();
+      this.logger.debug(`Dtek object id=${config.dtekObjectId}, checking it`);
+      await this.checkDtekObject();
       await this.getFeed();
     } catch (e) {
       this.onError(e, `Could not init`);
@@ -141,6 +145,11 @@ export class KdService implements OnApplicationBootstrap {
       return;
     }
 
+    if (!this.isDtekObjectAvailable) {
+      setTimeout(() => this.getFeed(), config.kdFeedRequestIntervalMs);
+      return;
+    }
+
     const url = `${this.apiHost}/v4/feed?page=1`;
     const requestConfig = this.buildRequestConfig('get', url);
 
@@ -154,9 +163,9 @@ export class KdService implements OnApplicationBootstrap {
 
       const noAuthStatuses = [401, 403];
       if (!noAuthStatuses.includes((e as AxiosError).response?.status)) {
-        const nextRequestDelay = config.kdFeedRequestTimeout * 5;
+        const nextRequestDelay = config.kdFeedRequestIntervalMs * 5;
         this.logger.warn(`Re-fetching feed in "${nextRequestDelay / 1000} sec"...`);
-        setTimeout(() => this.getFeed(), config.kdFeedRequestTimeout * 10);
+        setTimeout(() => this.getFeed(), config.kdFeedRequestIntervalMs * 10);
       }
 
       return;
@@ -167,7 +176,7 @@ export class KdService implements OnApplicationBootstrap {
     try {
       await this.processFeed(data);
 
-      let nextRequestDelay = config.kdFeedRequestTimeout;
+      let nextRequestDelay = config.kdFeedRequestIntervalMs;
       const rateLimitLeft = Number(headers['x-ratelimit-remaining']);
       this.feedRequestsCounter.limitsLeft.add(rateLimitLeft);
 
@@ -292,9 +301,9 @@ export class KdService implements OnApplicationBootstrap {
 
       const noAuthStatuses = [401, 403];
       if (tryCount <= 3 && !noAuthStatuses.includes((e as AxiosError).response?.status)) {
-        const nextRequestDelay = config.kdFeedRequestTimeout * 5;
+        const nextRequestDelay = config.kdFeedRequestIntervalMs * 5;
         this.logger.warn(`Re-fetching schedule in "${nextRequestDelay / 1000} sec"...`);
-        await wait(config.kdFeedRequestTimeout * 10);
+        await wait(config.kdFeedRequestIntervalMs * 10);
         return this.getSchedule(tryCount + 1);
       }
 
@@ -302,6 +311,29 @@ export class KdService implements OnApplicationBootstrap {
     }
 
     return response.data.schedule;
+  }
+
+  private async checkDtekObject(): Promise<void> {
+    const url = `${this.apiHost}/v3/dtek`;
+    const requestConfig = this.buildRequestConfig('get', url);
+
+    try {
+      const response = await firstValueFrom(this.httpService.request<IDtekObjectsResponse>(requestConfig));
+      const dtekObject = response.data.objects.find(object => object.id === config.dtekObjectId);
+      if (!dtekObject && this.isDtekObjectAvailable) {
+        this.isDtekObjectAvailable = false;
+        this.logger.error(`Dtek object not found (id=${config.dtekObjectId})`);
+        this.logger.debug(response.data);
+        this.botService.sendMessageToOwner(new BotMessageText(`Dtek object not found (id=${config.dtekObjectId})`)).then();
+      } else if (dtekObject && !this.isDtekObjectAvailable) {
+        this.isDtekObjectAvailable = true;
+        this.logger.log(`Dtek object found (id=${config.dtekObjectId})`);
+      }
+    } catch (e) {
+      this.onError(e, `Could not check Dtek objects`);
+    }
+
+    setTimeout(() => this.checkDtekObject(), config.kdDtekObjectsRequestIntervalMs);
   }
 
   private buildRequestConfig(method: 'get', url: string) {

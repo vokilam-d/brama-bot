@@ -68,6 +68,8 @@ export class BotService implements OnApplicationBootstrap {
   }
 
   async onApplicationBootstrap(): Promise<void> {
+    this.logger.log(`Running in app environment: ${config.appEnv}`);
+
     // this.setWebhook();
 
     await this.ensureAndCacheConfig();

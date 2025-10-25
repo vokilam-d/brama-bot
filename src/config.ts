@@ -7,6 +7,7 @@ export const config = {
   phoneNumber: process.env.PHONE_NUMBER,
   address: process.env.ADDRESS,
   dtekObjectId: Number(process.env.DTEK_OBJECT_ID),
-  kdFeedRequestTimeout: 15 * 1000, // 15 sec
+  kdFeedRequestIntervalMs: 15 * 1000, // 15 sec
+  kdDtekObjectsRequestIntervalMs: 60 * 1000, // 1 min
   appEnv: process.env.APP_ENV,
 };
