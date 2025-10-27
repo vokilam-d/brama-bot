@@ -57,7 +57,7 @@ export class BotService implements OnApplicationBootstrap {
   private readonly token = config.botToken;
   private readonly tooManyRequestsErrorCode = 429;
   private readonly textParseMode = 'HTML';
-  private readonly supportedTags: string[] = ['b', 'i', 'a', 'pre', 'code'];
+  private readonly supportedTags: string[] = ['b', 'i', 'a', 'pre', 'code', 'blockquote'];
 
   constructor(
     @InjectModel(BotConfig.name) private botConfigModel: Model<BotConfig>,
@@ -68,8 +68,6 @@ export class BotService implements OnApplicationBootstrap {
   }
 
   async onApplicationBootstrap(): Promise<void> {
-    this.logger.log(`Running in app environment: ${config.appEnv}`);
-
     // this.setWebhook();
 
     await this.ensureAndCacheConfig();
@@ -244,6 +242,14 @@ export class BotService implements OnApplicationBootstrap {
   ): Promise<void> {
     try {
       const ownerId = this.botConfig.ownerIds[0];
+
+      if (config.appEnv !== 'production') {
+        text
+          .newLine()
+          .newLine()
+          .addLine(BotMessageText.quote(`env=${config.appEnv}`));
+      }
+
       await this.sendMessage(ownerId, text);
     } catch (e) {
       this.logger.error(`Could not send message to owner:`);

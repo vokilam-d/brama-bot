@@ -1,37 +1,61 @@
-export enum ScheduleHourType {
+export enum PowerState {
   On = 0,
-  Half = 1,
+  MaybeOff = 1,
   Off = 2,
 }
 
 export interface IScheduleItem {
   "day_of_week": number,
   "hours": {
-    "h00": ScheduleHourType,
-    "h01": ScheduleHourType,
-    "h02": ScheduleHourType,
-    "h03": ScheduleHourType,
-    "h04": ScheduleHourType,
-    "h05": ScheduleHourType,
-    "h06": ScheduleHourType,
-    "h07": ScheduleHourType,
-    "h08": ScheduleHourType,
-    "h09": ScheduleHourType,
-    "h10": ScheduleHourType,
-    "h11": ScheduleHourType,
-    "h12": ScheduleHourType,
-    "h13": ScheduleHourType,
-    "h14": ScheduleHourType,
-    "h15": ScheduleHourType,
-    "h16": ScheduleHourType,
-    "h17": ScheduleHourType,
-    "h18": ScheduleHourType,
-    "h19": ScheduleHourType,
-    "h20": ScheduleHourType,
-    "h21": ScheduleHourType,
-    "h22": ScheduleHourType,
-    "h23": ScheduleHourType,
-  }
+    "h00_0": PowerState;
+    "h00_1": PowerState;
+    "h01_0": PowerState;
+    "h01_1": PowerState;
+    "h02_0": PowerState;
+    "h02_1": PowerState;
+    "h03_0": PowerState;
+    "h03_1": PowerState;
+    "h04_0": PowerState;
+    "h04_1": PowerState;
+    "h05_0": PowerState;
+    "h05_1": PowerState;
+    "h06_0": PowerState;
+    "h06_1": PowerState;
+    "h07_0": PowerState;
+    "h07_1": PowerState;
+    "h08_0": PowerState;
+    "h08_1": PowerState;
+    "h09_0": PowerState;
+    "h09_1": PowerState;
+    "h10_0": PowerState;
+    "h10_1": PowerState;
+    "h11_0": PowerState;
+    "h11_1": PowerState;
+    "h12_0": PowerState;
+    "h12_1": PowerState;
+    "h13_0": PowerState;
+    "h13_1": PowerState;
+    "h14_0": PowerState;
+    "h14_1": PowerState;
+    "h15_0": PowerState;
+    "h15_1": PowerState;
+    "h16_0": PowerState;
+    "h16_1": PowerState;
+    "h17_0": PowerState;
+    "h17_1": PowerState;
+    "h18_0": PowerState;
+    "h18_1": PowerState;
+    "h19_0": PowerState;
+    "h19_1": PowerState;
+    "h20_0": PowerState;
+    "h20_1": PowerState;
+    "h21_0": PowerState;
+    "h21_1": PowerState;
+    "h22_0": PowerState;
+    "h22_1": PowerState;
+    "h23_0": PowerState;
+    "h23_1": PowerState;
+  };
 }
 
 export interface IScheduleResponse {

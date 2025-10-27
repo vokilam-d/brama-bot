@@ -10,7 +10,7 @@ import { IFeedItem, IFeedResponse } from '../interfaces/feed-response.interface'
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
 import { AxiosError, AxiosResponse } from 'axios';
 import { KdProcessedFeedItem } from '../schemas/kd-processed-feed-item.schema';
-import { IScheduleItem, IScheduleResponse, ScheduleHourType } from '../interfaces/schedule-response.interface';
+import { IScheduleItem, IScheduleResponse, PowerState } from '../interfaces/schedule-response.interface';
 import { wait } from '../../../helpers/wait.function';
 import { pad } from '../../../helpers/pad.function';
 import { IDtekObjectsResponse } from '../interfaces/dtek-response.interface';
@@ -20,11 +20,6 @@ import { IDtekObjectsResponse } from '../interfaces/dtek-response.interface';
 
 enum FeedItemIdPrefix {
   POWER = 'dcn_',
-}
-
-interface ScheduleHour {
-  hour: number;
-  type: ScheduleHourType;
 }
 
 @Injectable()
@@ -71,24 +66,32 @@ export class KdService implements OnApplicationBootstrap {
       await this.ensureAndCacheConfig();
       await this.cacheProcessedFeedItems();
       await this.validatePersistedToken();
+
       this.logger.debug(`Dtek object id=${config.dtekObjectId}, checking it`);
       await this.checkDtekObject();
+
+      this.logger.debug(`Getting feed`);
       await this.getFeed();
     } catch (e) {
-      this.onError(e, `Could not init`);
+      this.onError(e, `Failed to init`);
     }
   }
 
   private async ensureAndCacheConfig(): Promise<void> {
+    this.logger.debug(`Ensuring and caching config...`);
+
     this.kdConfig = await this.kdConfigModel.findOne().exec();
     if (this.kdConfig) {
-      return;
+      this.logger.log(`Ensuring and caching config: Finished: Config found`);
+    } else {
+      this.kdConfig = new KdConfig();
+      this.kdConfig.accessToken = null;
+      this.kdConfig.lastProcessedFeedItemCreatedAtIso = null;
+      await this.kdConfigModel.create(this.kdConfig);
+      this.logger.log(`Ensuring and caching config: Finished: New config created`);
     }
 
-    this.kdConfig = new KdConfig();
-    this.kdConfig.accessToken = null;
-    this.kdConfig.lastProcessedFeedItemCreatedAtIso = null;
-    await this.kdConfigModel.create(this.kdConfig);
+    this.logger.debug(this.kdConfig);
   }
 
   private async validatePersistedToken(): Promise<void> {
@@ -101,9 +104,9 @@ export class KdService implements OnApplicationBootstrap {
         await this.login();
       }
 
-      this.logger.debug(`Validating persisted token finished, accessToken=${this.kdConfig.accessToken}`);
+      this.logger.debug(`Validating persisted token: Finished`);
     } catch (e) {
-      this.onError(e, `Could not validate persisted token`);
+      this.onError(e, `Validating persisted token: Failed`);
     }
   }
 
@@ -139,7 +142,7 @@ export class KdService implements OnApplicationBootstrap {
 
   private async getFeed(): Promise<void> {
     if (!this.kdConfig.accessToken) {
-      const message = `Could not get feed: no access token`;
+      const message = `Failed to get feed: no access token`;
       this.logger.error(message);
       this.botService.sendMessageToOwner(new BotMessageText(message)).then();
       return;
@@ -159,7 +162,7 @@ export class KdService implements OnApplicationBootstrap {
     try {
       response = await firstValueFrom(this.httpService.request<IFeedResponse>(requestConfig));
     } catch (e) {
-      this.onError(e, `Could not get feed`);
+      this.onError(e, `Failed to get feed`);
 
       const noAuthStatuses = [401, 403];
       if (!noAuthStatuses.includes((e as AxiosError).response?.status)) {
@@ -189,7 +192,7 @@ export class KdService implements OnApplicationBootstrap {
       setTimeout(() => this.getFeed(), nextRequestDelay);
 
     } catch (e) {
-      this.onError(e, `CRITICAL - Could not process feed`);
+      this.onError(e, `CRITICAL - Failed to process feed`);
     }
   }
 
@@ -217,8 +220,9 @@ export class KdService implements OnApplicationBootstrap {
       return;
     }
 
+    const schedulesDisabledTitle = `Графік не діє`;
     const relevantFeedItems = feed
-      .filter(feedItem => feedItem.id.startsWith(FeedItemIdPrefix.POWER))
+      .filter(feedItem => feedItem.id.startsWith(FeedItemIdPrefix.POWER) || feedItem.title.includes(schedulesDisabledTitle))
       .reverse();
 
     const processedFeedItems: IFeedItem[] = [];
@@ -229,25 +233,26 @@ export class KdService implements OnApplicationBootstrap {
       }
 
       const createdDate = this.buildDateByItemCreatedAt(feedItem.created_at);
-      this.kdConfig.lastProcessedFeedItemCreatedAtIso = createdDate.toISOString();
       await this.onFeedItemProcessed(feedItem);
       processedFeedItems.push(feedItem);
 
       const lastProcessedFeedItemCreatedAt = new Date(this.kdConfig.lastProcessedFeedItemCreatedAtIso);
-      if (createdDate < lastProcessedFeedItemCreatedAt) {
+      if (createdDate <= lastProcessedFeedItemCreatedAt) {
         // double-check for already processed feed items
 
-        const message = `Failed double-check for already processed feed items, createdDate=${createdDate.toISOString()}, lastProcessedFeedItemCreatedAt=${lastProcessedFeedItemCreatedAt.toISOString()}`;
+        const message = `Failed double-check for already processed feed items, createdDate=${createdDate.toISOString()}, lastProcessedFeedItemCreatedAt=${lastProcessedFeedItemCreatedAt.toISOString()}, title=${feedItem.title}`;
         this.logger.error(message);
         this.botService.sendMessageToOwner(new BotMessageText(message)).then();
         continue;
       }
 
+      this.kdConfig.lastProcessedFeedItemCreatedAtIso = createdDate.toISOString();
+
       const createdTimeFormatted = this.getFormattedTime(createdDate);
       const botMessageText = new BotMessageText();
       const isPowerToggle = feedItem.title.includes(`Стабілізаційне відключення`)
         || feedItem.title.includes(`Світло повертається`)
-        || feedItem.title.includes(`Графік не діє`);
+        || feedItem.title.includes(schedulesDisabledTitle);
       const isScheduleToday = feedItem.title === `Новий графік`;
       const isScheduleTomorrow = feedItem.title === `Графік на завтра`;
 
@@ -255,6 +260,7 @@ export class KdService implements OnApplicationBootstrap {
         .add(BotMessageText.bold(feedItem.title))
         .add(` • ${createdTimeFormatted}`)
         .newLine()
+        .newLine();
 
       if (isPowerToggle) {
         botMessageText.addLine(feedItem.description);
@@ -263,7 +269,7 @@ export class KdService implements OnApplicationBootstrap {
 
         const weekSchedule = await this.getSchedule();
         if (!weekSchedule) {
-          this.botService.sendMessageToOwner(new BotMessageText(`CRITICAL - Couldn't get schedule`)).then();
+          this.botService.sendMessageToOwner(new BotMessageText(`CRITICAL - Failed to get schedule`)).then();
           continue;
         }
 
@@ -290,14 +296,14 @@ export class KdService implements OnApplicationBootstrap {
   }
 
   private async getSchedule(tryCount: number = 1): Promise<IScheduleItem[]> {
-    const url = `${this.apiHost}/v3/dtek/${config.dtekObjectId}`;
+    const url = `${this.apiHost}/v4/dtek/${config.dtekObjectId}`;
     const requestConfig = this.buildRequestConfig('get', url);
 
     let response: AxiosResponse<IScheduleResponse>;
     try {
       response = await firstValueFrom(this.httpService.request<IScheduleResponse>(requestConfig));
     } catch (e) {
-      this.onError(e, `Could not get schedule`);
+      this.onError(e, `Failed to get schedule`);
 
       const noAuthStatuses = [401, 403];
       if (tryCount <= 3 && !noAuthStatuses.includes((e as AxiosError).response?.status)) {
@@ -330,7 +336,7 @@ export class KdService implements OnApplicationBootstrap {
         this.logger.log(`Dtek object found (id=${config.dtekObjectId})`);
       }
     } catch (e) {
-      this.onError(e, `Could not check Dtek objects`);
+      this.onError(e, `Failed to check Dtek objects`);
     }
 
     setTimeout(() => this.checkDtekObject(), config.kdDtekObjectsRequestIntervalMs);
@@ -380,7 +386,7 @@ export class KdService implements OnApplicationBootstrap {
     const processedFeedItems = await this.kdProcessedFeedItemModel.find().exec();
     this.cachedProcessedFeedItemIds = processedFeedItems.map(feedItem => feedItem.id);
 
-    this.logger.debug(`Caching processed feed item id finished, count=${this.cachedProcessedFeedItemIds.length}`);
+    this.logger.debug(`Caching processed feed item ids: Finished (count=${this.cachedProcessedFeedItemIds.length})`);
   }
 
   private async onFeedItemProcessed(feedDcnItem: IFeedItem): Promise<void> {
@@ -396,7 +402,7 @@ export class KdService implements OnApplicationBootstrap {
     this.cachedProcessedFeedItemIds.push(processedFeedItem.id);
     await this.kdProcessedFeedItemModel.create(processedFeedItem);
 
-    this.logger.debug(`On feed item processed finished:`);
+    this.logger.debug(`On feed item processed: Finished`);
     this.logger.debug(processedFeedItem);
   }
 
@@ -424,63 +430,85 @@ export class KdService implements OnApplicationBootstrap {
     weekSchedule: IScheduleItem[],
     date: Date,
   ): BotMessageText {
-    const botMessageText = new BotMessageText();
-
     let day = date.getDay();
-    if (day === 0) { // force to KD format
+    if (day === 0) { // force to KD indexes, where Sunday is 7, not 0 (like in JS Date)
       day = 7;
     }
-    const daySchedule = weekSchedule[day - 1];
-    const offHourRanges: [ScheduleHour, ScheduleHour][] = [];
+    const daySchedule = weekSchedule.find(schedule => schedule.day_of_week === day);
+    const halfHours = Object.keys(daySchedule.hours).sort();
 
-    Object.keys(daySchedule.hours).sort().forEach((_hourName, index, hourNames) => {
-      const getHourType = (indexArg: number): ScheduleHourType => {
-        return daySchedule.hours[hourNames[indexArg]];
-      };
-      const hourType = getHourType(index);
-      const prevHourType = getHourType(index - 1);
+    const powerStatesWithRanges: { powerState: PowerState; ranges: { startHalfHour: string; endHalfHour?: string; }[] }[] = [];
 
-      if (hourType === ScheduleHourType.Off || hourType === ScheduleHourType.Half) {
-        const isPrevHourOn = index === 0 ? true : prevHourType === ScheduleHourType.On;
+    for (let i = 0; i < halfHours.length; i++) {
+      const halfHour = halfHours[i];
+      const powerState = daySchedule.hours[halfHour];
+      const lastPowerStateWithRanges = powerStatesWithRanges.at(-1);
+      const lastRange = lastPowerStateWithRanges?.ranges.at(-1);
+      const isLastRangeEnded = Boolean(lastRange?.endHalfHour);
 
-        const scheduleHour: ScheduleHour = { hour: index, type: hourType };
-        if (isPrevHourOn) {
-          offHourRanges.push([scheduleHour, scheduleHour]);
-        } else {
-          offHourRanges[offHourRanges.length - 1][1] = scheduleHour;
-        }
-      }
-    });
-
-    if (offHourRanges.length) {
-      botMessageText.addLine(`Світло буде відсутнє:`);
-
-      for (let [start, end] of offHourRanges) { // eslint-disable-line prefer-const
-        const addHourText = (scheduleHour: ScheduleHour): void => {
-          botMessageText.add(pad(scheduleHour.hour));
-          if (scheduleHour.type === ScheduleHourType.Off) {
-            botMessageText.add(`:00`);
-          } else if (scheduleHour.type === ScheduleHourType.Half) {
-            botMessageText.add(`:30`);
+      const handleOffPowerState = (powerState: PowerState) => {
+        if (!lastPowerStateWithRanges) {
+          powerStatesWithRanges.push({ powerState: powerState, ranges: [{ startHalfHour: halfHour }] });
+        } else if (lastPowerStateWithRanges.powerState !== powerState) {
+          if (lastRange && !isLastRangeEnded) {
+            lastRange.endHalfHour = halfHour;
           }
-        };
 
-        botMessageText.add(`з `);
-        addHourText(start);
-
-        botMessageText.add(` до `);
-        if (end.type === ScheduleHourType.Off) {
-          end.hour += 1;
+          powerStatesWithRanges.push({ powerState: powerState, ranges: [{ startHalfHour: halfHour }] });
+        } else if (isLastRangeEnded) {
+          lastPowerStateWithRanges.ranges.push({ startHalfHour: halfHour });
         }
-        addHourText(end);
+      };
 
-        botMessageText.newLine();
+      if (powerState === PowerState.On) {
+        if (lastRange && !isLastRangeEnded) {
+          lastRange.endHalfHour = halfHour;
+        }
+      } else if (powerState === PowerState.Off || powerState === PowerState.MaybeOff) {
+        handleOffPowerState(powerState);
       }
-
-    } else {
-      botMessageText.addLine(`Світло буде весь день`);
     }
 
-    return botMessageText;
-  };
+    const messageText = new BotMessageText();
+
+    if (powerStatesWithRanges.length === 0) {
+      messageText.addLine(`Світло буде весь день`);
+      return messageText;
+    }
+
+    const lastRange = powerStatesWithRanges.at(-1).ranges.at(-1);
+    if (!lastRange.endHalfHour) {
+      lastRange.endHalfHour = 'h00_0';
+    }
+
+    const buildReadableHalfHour = (halfHourStr: string): string => {
+      const match = halfHourStr.match(/^h(\d{2})_([01])$/);
+
+      if (!match) {
+        return halfHourStr;
+      }
+
+      const hour = match[1];
+      const halfHourIndex = match[2];
+      const halfHour = halfHourIndex === '1' ? '30' : '00';
+
+      return `${hour}:${halfHour}`;
+    };
+
+    for (const powerStateWithRanges of powerStatesWithRanges) {
+      if (powerStateWithRanges.powerState === PowerState.Off) {
+        messageText.addLine(`Світло буде відсутнє:`);
+      } else if (powerStateWithRanges.powerState === PowerState.MaybeOff) {
+        messageText.addLine(`Можливе відключення:`);
+      }
+
+      for (const range of powerStateWithRanges.ranges) {
+        const start = buildReadableHalfHour(range.startHalfHour);
+        const end = buildReadableHalfHour(range.endHalfHour);
+        messageText.addLine(`з ${start} до ${end}`);
+      }
+    }
+
+    return messageText;
+  }
 }

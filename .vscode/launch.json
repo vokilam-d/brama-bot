@@ -5,24 +5,41 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Debug NestJS App (TypeScript)",
       "type": "node",
       "request": "launch",
-      "name": "main.ts",
-      "skipFiles": [
-        "<node_internals>/**"
-      ],
-      "program": "${workspaceFolder}\\src\\main.ts",
-      "runtimeArgs": [
-        "--inspect",
-        "-r",
-        "ts-node/register",
-        "-r",
-        "tsconfig-paths/register"
-      ],
+      "program": "${workspaceFolder}/node_modules/@nestjs/cli/bin/nest.js",
+      "args": ["start", "--debug"],
       "envFile": "${workspaceFolder}/.env",
       "console": "integratedTerminal",
-      "internalConsoleOptions": "neverOpen",
-      "sourceMaps": true
+      "restart": true,
+      "protocol": "inspector",
+      "runtimeArgs": ["--nolazy"],
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "outputCapture": "std",
+      "skipFiles": [
+        "<node_internals>/**",
+        "node_modules/**"
+      ]
+    },
+    {
+      "name": "Debug NestJS App (Production Build)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/dist/main.js",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "restart": true,
+      "protocol": "inspector",
+      "sourceMaps": true,
+      "cwd": "${workspaceFolder}",
+      "outputCapture": "std",
+      "skipFiles": [
+        "<node_internals>/**",
+        "node_modules/**"
+      ],
+      "preLaunchTask": "npm: build"
     }
   ]
 }

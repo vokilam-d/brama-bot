@@ -105,4 +105,8 @@ export class BotMessageText {
   static inlineCode(code: string): string {
     return `<code>${code}</code>`;
   }
+
+  static quote(text: string): string {
+    return `<blockquote>${text}</blockquote>`;
+  }
 }
