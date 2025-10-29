@@ -47,8 +47,14 @@ export class KdService implements OnApplicationBootstrap {
   }
 
   async onApplicationBootstrap(): Promise<void> {
-    this.botService.events.on(PendingMessageType.askForCode, code => {
+    this.botService.events.on(PendingMessageType.AskForCode, code => {
       this.logger.debug({ code });
+    });
+    this.botService.events.on(PendingMessageType.GetSchedule, (options: { day: 'today' | 'tomorrow'; chatId: number; }) => {
+      this.sendScheduleToChat(options.day, options.chatId).then();
+    });
+    this.botService.events.on(PendingMessageType.SendScheduleToAll, (options: { day: 'today' | 'tomorrow'; }) => {
+      this.sendScheduleToChat(options.day, undefined, true).then();
     });
 
     setInterval(() => {
@@ -293,6 +299,31 @@ export class KdService implements OnApplicationBootstrap {
 
     this.logger.debug(`Processing feed finished, items count=${processedFeedItems.length}`);
     await this.persistConfig();
+  }
+
+  private async sendScheduleToChat(day: 'today' | 'tomorrow', chatId?: number, sendToGroups: boolean = false): Promise<void> {
+    const weekSchedule = await this.getSchedule();
+    if (!weekSchedule) {
+      return;
+    }
+
+    const date = new Date();
+    let dayName = 'сьогодні';
+    if (day === 'tomorrow') {
+      date.setDate(date.getDate() + 1);
+      dayName = 'завтра';
+    }
+
+    const messageText = new BotMessageText()
+      .addLine(BotMessageText.bold(`🗓 Графік на ${dayName}`))
+      .newLine();
+    messageText.merge(this.buildDayScheduleMessage(weekSchedule, date));
+
+    if (chatId) {
+      await this.botService.sendMessage(chatId, messageText);
+    } else if (sendToGroups) {
+      await this.botService.sendMessageToAllEnabledGroups(messageText);
+    }
   }
 
   private async getSchedule(tryCount: number = 1): Promise<IScheduleItem[]> {

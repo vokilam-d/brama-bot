@@ -32,7 +32,9 @@ enum ApiMethodName {
 }
 
 export enum PendingMessageType {
-  askForCode = 'askForCode',
+  AskForCode = 'askForCode',
+  GetSchedule = 'getSchedule',
+  SendScheduleToAll = 'sendScheduleToAll',
 }
 
 enum BotCommand {
@@ -40,6 +42,8 @@ enum BotCommand {
   Disable = '/disable',
   Status = '/status',
   SetGroupStatus = '/set_group_status',
+  SendScheduleToAll = '/send_schedule_to_all',
+  GetSchedule = '/get_schedule',
 }
 
 @Injectable()
@@ -162,6 +166,28 @@ export class BotService implements OnApplicationBootstrap {
           await this.sendMessage(chatId, this.buildStatusText());
           break;
 
+        case BotCommand.GetSchedule: {
+          const day = args[0] as 'today' | 'tomorrow';
+          if (day !== 'today' && day !== 'tomorrow') {
+            await this.sendMessage(chatId, new BotMessageText(`Invalid day: ${day}`));
+            return;
+          }
+
+          this.events.emit(PendingMessageType.GetSchedule, { day, chatId });
+          break;
+        }
+
+        case BotCommand.SendScheduleToAll: {
+          const day = args[0] as 'today' | 'tomorrow';
+          if (day !== 'today' && day !== 'tomorrow') {
+            await this.sendMessage(chatId, new BotMessageText(`Invalid day: ${day}`));
+            return;
+          }
+          this.events.emit(PendingMessageType.SendScheduleToAll, { day });
+          await this.likeMessage(chatId, message.message_id);
+          break;
+        }
+
         default:
           return;
       }
@@ -186,8 +212,8 @@ export class BotService implements OnApplicationBootstrap {
     }
     const pendingBotMessage = this.pendingMessages[pendingBotMessageIndex];
 
-    if (pendingBotMessage.type === PendingMessageType.askForCode) {
-      this.events.emit(PendingMessageType.askForCode, message.text);
+    if (pendingBotMessage.type === PendingMessageType.AskForCode) {
+      this.events.emit(PendingMessageType.AskForCode, message.text);
 
       this.pendingMessages.splice(pendingBotMessageIndex, 1);
     }
@@ -200,7 +226,7 @@ export class BotService implements OnApplicationBootstrap {
     const response = await this.sendMessage(this.botConfig.ownerIds[0], text);
     this.logger.debug(response);
     this.pendingMessages.push({
-      type: PendingMessageType.askForCode,
+      type: PendingMessageType.AskForCode,
       chatId: response[0].chat.id,
       messageId: response[0].message_id,
     });
@@ -267,7 +293,7 @@ export class BotService implements OnApplicationBootstrap {
     return this.execMethod(ApiMethodName.SetMessageReaction, payload);
   }
 
-  private async sendMessage(
+  async sendMessage(
     chatId: string | number,
     text: BotMessageText,
     options: {
