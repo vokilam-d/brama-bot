@@ -194,7 +194,7 @@ export class BotService implements OnApplicationBootstrap {
         case BotCommand.GetCommands: {
           const commandsText = new BotMessageText(BotMessageText.bold(`Commands:`));
           for (const command of Object.values(BotCommand)) {
-            commandsText.addLine(command);
+            commandsText.newLine().addLine(command);
           }
           await this.sendMessage(chatId, commandsText);
           break;
@@ -251,7 +251,8 @@ export class BotService implements OnApplicationBootstrap {
   ): Promise<void> {
     this.logger.debug(`Sending message to all enabled groups... (text=${text.toString()})`);
     if (!this.botConfig.isEnabled) {
-      this.logger.debug(`Sending message to all enabled groups: Exiting, bot is disabled`);
+      this.sendMessageToOwner(new BotMessageText(`Tried to send message to all enabled groups, but bot is disabled (text=${text.toString()})`)).then();
+      this.logger.warn(`Sending message to all enabled groups: Exiting, bot is disabled`);
       return;
     }
 

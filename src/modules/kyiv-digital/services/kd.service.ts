@@ -10,6 +10,7 @@ import { IFeedItem, IFeedResponse } from '../interfaces/feed-response.interface'
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
 import { AxiosError, AxiosResponse } from 'axios';
 import { KdProcessedFeedItem } from '../schemas/kd-processed-feed-item.schema';
+import { KdProcessedScheduleInfo } from '../schemas/kd-processed-schedule-info.schema';
 import { IScheduleItem, IScheduleResponse, PowerState } from '../interfaces/schedule-response.interface';
 import { wait } from '../../../helpers/wait.function';
 import { pad } from '../../../helpers/pad.function';
@@ -41,6 +42,7 @@ export class KdService implements OnApplicationBootstrap {
   constructor(
     @InjectModel(KdConfig.name) private kdConfigModel: Model<KdConfig>,
     @InjectModel(KdProcessedFeedItem.name) private kdProcessedFeedItemModel: Model<KdProcessedFeedItem>,
+    @InjectModel(KdProcessedScheduleInfo.name) private kdProcessedScheduleInfoModel: Model<KdProcessedScheduleInfo>,
     private readonly httpService: HttpService,
     private readonly botService: BotService,
   ) {
@@ -464,19 +466,11 @@ export class KdService implements OnApplicationBootstrap {
         continue;
       }
 
-      const isScheduleNotSetup = Object.values(schedule.hours).some(powerState => powerState === PowerState.MaybeOff);
-      if (isScheduleNotSetup) {
-        continue;
-      }
-
-      const processedScheduleInfoIndex = this.cachedKdConfig.processedScheduleInfos.findIndex(processedScheduleInfo => {
-        return processedScheduleInfo.dateIso === date.toISOString();
-      });
-      const processedScheduleInfo = this.cachedKdConfig.processedScheduleInfos[processedScheduleInfoIndex];
-      if (processedScheduleInfo) {
+      const processedScheduleInfoDoc = await this.kdProcessedScheduleInfoModel.findOne({ dateIso: date.toISOString() });
+      if (processedScheduleInfoDoc) {
         const isScheduleTheSame = Object.keys(schedule.hours).every(halfHour => {
           const currentPowerState = schedule.hours[halfHour];
-          const processedPowerState = processedScheduleInfo.scheduleItemHours[halfHour];
+          const processedPowerState = processedScheduleInfoDoc.scheduleItemHours[halfHour];
           return currentPowerState === processedPowerState;
         });
 
@@ -485,10 +479,32 @@ export class KdService implements OnApplicationBootstrap {
         }
       }
 
-      const dayName = date === today ? 'сьогодні' : 'завтра';
-      const scheduleTitle = processedScheduleInfo?.isSent ? `Новий графік` : `Графік`;
+      const persistProcessedScheduleInfo = async (isSent: boolean): Promise<void> => {
+        if (processedScheduleInfoDoc) {
+          processedScheduleInfoDoc.isSent = isSent;
+          processedScheduleInfoDoc.scheduleItemHours = schedule.hours;
+          await processedScheduleInfoDoc.save();
+        } else {
+          const newProcessedScheduleInfo: KdProcessedScheduleInfo = {
+            dateIso: date.toISOString(),
+            scheduleItemHours: schedule.hours,
+            isSent: isSent,
+          };
+          await this.kdProcessedScheduleInfoModel.create(newProcessedScheduleInfo);
+        }
+      };
 
-      this.logger.debug(`Schedule updated (date=${date.toISOString()}, scheduleTitle=${scheduleTitle}, dayName=${dayName}, hours=${JSON.stringify(schedule.hours)}, processedHours=${JSON.stringify(processedScheduleInfo?.scheduleItemHours)})`);
+      const isScheduleNotSetup = Object.values(schedule.hours).some(powerState => powerState === PowerState.MaybeOff);
+      if (isScheduleNotSetup) {
+        this.logger.debug(`Schedule not setup (date=${date.toISOString()})`);
+        await persistProcessedScheduleInfo(false);
+        continue;
+      }
+
+      const dayName = date === today ? 'сьогодні' : 'завтра';
+      const scheduleTitle = processedScheduleInfoDoc?.isSent ? `Новий графік` : `Графік`;
+
+      this.logger.debug(`Schedule updated (date=${date.toISOString()}, scheduleTitle=${scheduleTitle}, dayName=${dayName}, hours=${JSON.stringify(schedule.hours)}, processedHours=${JSON.stringify(processedScheduleInfoDoc?.toJSON().scheduleItemHours)})`);
 
       const messageText = new BotMessageText()
         .addLine(BotMessageText.bold(`🗓 ${scheduleTitle} на ${dayName}`))
@@ -497,18 +513,7 @@ export class KdService implements OnApplicationBootstrap {
       messageText.newLine().addLine(BotMessageText.quote(`test`));
 
       await this.botService.sendMessageToOwner(messageText);
-
-      if (processedScheduleInfoIndex === -1) {
-        this.cachedKdConfig.processedScheduleInfos.push({
-          dateIso: date.toISOString(),
-          scheduleItemHours: schedule.hours,
-          isSent: true,
-        });
-      } else {
-        this.cachedKdConfig.processedScheduleInfos[processedScheduleInfoIndex].scheduleItemHours = schedule.hours;
-        this.cachedKdConfig.processedScheduleInfos[processedScheduleInfoIndex].isSent = true;
-      }
-      await this.persistConfig();
+      await persistProcessedScheduleInfo(true);
     }
 
     setTimeout(() => this.handleScheduleUpdates(), config.kdFeedRequestIntervalMs);
