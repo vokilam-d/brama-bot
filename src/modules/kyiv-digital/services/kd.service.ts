@@ -488,6 +488,8 @@ export class KdService implements OnApplicationBootstrap {
       const dayName = date === today ? 'сьогодні' : 'завтра';
       const scheduleTitle = processedScheduleInfo?.isSent ? `Новий графік` : `Графік`;
 
+      this.logger.debug(`Schedule updated (date=${date.toISOString()}, scheduleTitle=${scheduleTitle}, dayName=${dayName}, hours=${JSON.stringify(schedule.hours)}, processedHours=${JSON.stringify(processedScheduleInfo?.scheduleItemHours)})`);
+
       const messageText = new BotMessageText()
         .addLine(BotMessageText.bold(`🗓 ${scheduleTitle} на ${dayName}`))
         .newLine();

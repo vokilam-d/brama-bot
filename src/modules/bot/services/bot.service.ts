@@ -42,8 +42,11 @@ enum BotCommand {
   Disable = '/disable',
   Status = '/status',
   SetGroupStatus = '/set_group_status',
-  SendScheduleToAll = '/send_schedule_to_all',
-  GetSchedule = '/get_schedule',
+  SendScheduleTodayToAll = '/send_schedule_today_to_all',
+  SendScheduleTomorrowToAll = '/send_schedule_tomorrow_to_all',
+  GetScheduleToday = '/get_schedule_today',
+  GetScheduleTomorrow = '/get_schedule_tomorrow',
+  GetCommands = '/c',
 }
 
 @Injectable()
@@ -166,25 +169,34 @@ export class BotService implements OnApplicationBootstrap {
           await this.sendMessage(chatId, this.buildStatusText());
           break;
 
-        case BotCommand.GetSchedule: {
-          const day = args[0] as 'today' | 'tomorrow';
-          if (day !== 'today' && day !== 'tomorrow') {
-            await this.sendMessage(chatId, new BotMessageText(`Invalid day: ${day}`));
-            return;
-          }
-
-          this.events.emit(PendingMessageType.GetSchedule, { day, chatId });
+        case BotCommand.GetScheduleToday: {
+          this.events.emit(PendingMessageType.GetSchedule, { day: 'today', chatId });
           break;
         }
 
-        case BotCommand.SendScheduleToAll: {
-          const day = args[0] as 'today' | 'tomorrow';
-          if (day !== 'today' && day !== 'tomorrow') {
-            await this.sendMessage(chatId, new BotMessageText(`Invalid day: ${day}`));
-            return;
-          }
-          this.events.emit(PendingMessageType.SendScheduleToAll, { day });
+        case BotCommand.GetScheduleTomorrow: {
+          this.events.emit(PendingMessageType.GetSchedule, { day: 'tomorrow', chatId });
+          break;
+        }
+
+        case BotCommand.SendScheduleTodayToAll: {
+          this.events.emit(PendingMessageType.SendScheduleToAll, { day: 'today' });
           await this.likeMessage(chatId, message.message_id);
+          break;
+        }
+
+        case BotCommand.SendScheduleTomorrowToAll: {
+          this.events.emit(PendingMessageType.SendScheduleToAll, { day: 'tomorrow' });
+          await this.likeMessage(chatId, message.message_id);
+          break;
+        }
+
+        case BotCommand.GetCommands: {
+          const commandsText = new BotMessageText(BotMessageText.bold(`Commands:`));
+          for (const command of Object.values(BotCommand)) {
+            commandsText.addLine(command);
+          }
+          await this.sendMessage(chatId, commandsText);
           break;
         }
 
