@@ -27,7 +27,7 @@ export class KdService implements OnApplicationBootstrap {
 
   private logger = new Logger(KdService.name);
 
-  private kdConfig: KdConfig;
+  private cachedKdConfig: KdConfig;
   private feedRequestsCounter = {
     count: 0,
     limitsLeft: new Set(),
@@ -76,8 +76,11 @@ export class KdService implements OnApplicationBootstrap {
       this.logger.debug(`Dtek object id=${config.dtekObjectId}, checking it`);
       await this.checkDtekObject();
 
-      this.logger.debug(`Getting feed`);
-      await this.getFeed();
+      this.logger.debug(`Requesting feed`);
+      await this.handleFeed();
+
+      this.logger.debug(`Requesting schedule`);
+      await this.handleScheduleUpdates();
     } catch (e) {
       this.onError(e, `Failed to init`);
     }
@@ -86,25 +89,25 @@ export class KdService implements OnApplicationBootstrap {
   private async ensureAndCacheConfig(): Promise<void> {
     this.logger.debug(`Ensuring and caching config...`);
 
-    this.kdConfig = await this.kdConfigModel.findOne().exec();
-    if (this.kdConfig) {
+    this.cachedKdConfig = await this.kdConfigModel.findOne().exec();
+    if (this.cachedKdConfig) {
       this.logger.log(`Ensuring and caching config: Finished: Config found`);
     } else {
-      this.kdConfig = new KdConfig();
-      this.kdConfig.accessToken = null;
-      this.kdConfig.lastProcessedFeedItemCreatedAtIso = null;
-      await this.kdConfigModel.create(this.kdConfig);
+      this.cachedKdConfig = new KdConfig();
+      this.cachedKdConfig.accessToken = null;
+      this.cachedKdConfig.lastProcessedFeedItemCreatedAtIso = null;
+      await this.kdConfigModel.create(this.cachedKdConfig);
       this.logger.log(`Ensuring and caching config: Finished: New config created`);
     }
 
-    this.logger.debug(this.kdConfig);
+    this.logger.debug(this.cachedKdConfig);
   }
 
   private async validatePersistedToken(): Promise<void> {
     this.logger.debug(`Validating persisted token...`);
 
     try {
-      if (this.kdConfig.accessToken) {
+      if (this.cachedKdConfig.accessToken) {
         await this.refreshToken();
       } else {
         await this.login();
@@ -146,8 +149,8 @@ export class KdService implements OnApplicationBootstrap {
     this.logger.debug(`Refreshing token finished`);
   }
 
-  private async getFeed(): Promise<void> {
-    if (!this.kdConfig.accessToken) {
+  private async handleFeed(): Promise<void> {
+    if (!this.cachedKdConfig.accessToken) {
       const message = `Failed to get feed: no access token`;
       this.logger.error(message);
       this.botService.sendMessageToOwner(new BotMessageText(message)).then();
@@ -155,7 +158,7 @@ export class KdService implements OnApplicationBootstrap {
     }
 
     if (!this.isDtekObjectAvailable) {
-      setTimeout(() => this.getFeed(), config.kdFeedRequestIntervalMs);
+      setTimeout(() => this.handleFeed(), config.kdFeedRequestIntervalMs);
       return;
     }
 
@@ -174,7 +177,7 @@ export class KdService implements OnApplicationBootstrap {
       if (!noAuthStatuses.includes((e as AxiosError).response?.status)) {
         const nextRequestDelay = config.kdFeedRequestIntervalMs * 5;
         this.logger.warn(`Re-fetching feed in "${nextRequestDelay / 1000} sec"...`);
-        setTimeout(() => this.getFeed(), config.kdFeedRequestIntervalMs * 10);
+        setTimeout(() => this.handleFeed(), config.kdFeedRequestIntervalMs * 10);
       }
 
       return;
@@ -195,7 +198,7 @@ export class KdService implements OnApplicationBootstrap {
         this.botService.sendMessageToOwner(new BotMessageText(`Rate limit left: ${rateLimitLeft}`)).then();
       }
 
-      setTimeout(() => this.getFeed(), nextRequestDelay);
+      setTimeout(() => this.handleFeed(), nextRequestDelay);
 
     } catch (e) {
       this.onError(e, `CRITICAL - Failed to process feed`);
@@ -204,9 +207,9 @@ export class KdService implements OnApplicationBootstrap {
 
   private async persistConfig(): Promise<void> {
     this.logger.debug(`Persisting config...`);
-    this.logger.debug(this.kdConfig);
+    this.logger.debug(this.cachedKdConfig);
 
-    await this.kdConfigModel.findOneAndUpdate({}, this.kdConfig);
+    await this.kdConfigModel.findOneAndUpdate({}, this.cachedKdConfig);
 
     this.logger.debug(`Persisting config finished`);
   }
@@ -242,7 +245,7 @@ export class KdService implements OnApplicationBootstrap {
       await this.onFeedItemProcessed(feedItem);
       processedFeedItems.push(feedItem);
 
-      const lastProcessedFeedItemCreatedAt = new Date(this.kdConfig.lastProcessedFeedItemCreatedAtIso);
+      const lastProcessedFeedItemCreatedAt = new Date(this.cachedKdConfig.lastProcessedFeedItemCreatedAtIso);
       if (createdDate <= lastProcessedFeedItemCreatedAt) {
         // double-check for already processed feed items
 
@@ -252,7 +255,7 @@ export class KdService implements OnApplicationBootstrap {
         continue;
       }
 
-      this.kdConfig.lastProcessedFeedItemCreatedAtIso = createdDate.toISOString();
+      this.cachedKdConfig.lastProcessedFeedItemCreatedAtIso = createdDate.toISOString();
 
       const createdTimeFormatted = this.getFormattedTime(createdDate);
       const botMessageText = new BotMessageText();
@@ -273,7 +276,7 @@ export class KdService implements OnApplicationBootstrap {
       } else if (isScheduleToday || isScheduleTomorrow) {
         botMessageText.prependToFirstLine('🗓 ');
 
-        const weekSchedule = await this.getSchedule();
+        const weekSchedule = await this.getWeekSchedule();
         if (!weekSchedule) {
           this.botService.sendMessageToOwner(new BotMessageText(`CRITICAL - Failed to get schedule`)).then();
           continue;
@@ -301,8 +304,12 @@ export class KdService implements OnApplicationBootstrap {
     await this.persistConfig();
   }
 
-  private async sendScheduleToChat(day: 'today' | 'tomorrow', chatId?: number, sendToGroups: boolean = false): Promise<void> {
-    const weekSchedule = await this.getSchedule();
+  private async sendScheduleToChat(
+    day: 'today' | 'tomorrow',
+    chatId?: number,
+    sendToGroups: boolean = false,
+  ): Promise<void> {
+    const weekSchedule = await this.getWeekSchedule();
     if (!weekSchedule) {
       return;
     }
@@ -326,7 +333,7 @@ export class KdService implements OnApplicationBootstrap {
     }
   }
 
-  private async getSchedule(tryCount: number = 1): Promise<IScheduleItem[]> {
+  private async getWeekSchedule(tryCount: number = 1): Promise<IScheduleItem[]> {
     const url = `${this.apiHost}/v4/dtek/${config.dtekObjectId}`;
     const requestConfig = this.buildRequestConfig('get', url);
 
@@ -341,7 +348,7 @@ export class KdService implements OnApplicationBootstrap {
         const nextRequestDelay = config.kdFeedRequestIntervalMs * 5;
         this.logger.warn(`Re-fetching schedule in "${nextRequestDelay / 1000} sec"...`);
         await wait(config.kdFeedRequestIntervalMs * 10);
-        return this.getSchedule(tryCount + 1);
+        return this.getWeekSchedule(tryCount + 1);
       }
 
       return;
@@ -374,7 +381,7 @@ export class KdService implements OnApplicationBootstrap {
   }
 
   private buildRequestConfig(method: 'get', url: string) {
-    const authHeader = `Bearer ${this.kdConfig.accessToken}`;
+    const authHeader = `Bearer ${this.cachedKdConfig.accessToken}`;
 
     /* eslint-disable */
     return {
@@ -437,6 +444,74 @@ export class KdService implements OnApplicationBootstrap {
     this.logger.debug(processedFeedItem);
   }
 
+  private async handleScheduleUpdates(): Promise<void> {
+    const today = new Date();
+    today.setHours(6, 0, 0, 0); // set to 6 hours to avoid DST/time zone issues
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const weekSchedule = await this.getWeekSchedule();
+    if (!weekSchedule) {
+      setTimeout(() => this.handleScheduleUpdates(), config.kdFeedRequestIntervalMs * 10);
+      return;
+    }
+
+    for (const date of [today, tomorrow]) {
+      const dayKdFormat = this.buildDayKdFormat(date);
+      const schedule = weekSchedule.find(schedule => schedule.day_of_week === dayKdFormat);
+      if (!schedule) {
+        this.botService.sendMessageToOwner(new BotMessageText(`CRITICAL - No schedule found for date ${date.toISOString()}`)).then();
+        continue;
+      }
+
+      const isScheduleNotSetup = Object.values(schedule.hours).some(powerState => powerState === PowerState.MaybeOff);
+      if (isScheduleNotSetup) {
+        continue;
+      }
+
+      const processedScheduleInfoIndex = this.cachedKdConfig.processedScheduleInfos.findIndex(processedScheduleInfo => {
+        return processedScheduleInfo.dateIso === date.toISOString();
+      });
+      const processedScheduleInfo = this.cachedKdConfig.processedScheduleInfos[processedScheduleInfoIndex];
+      if (processedScheduleInfo) {
+        const isScheduleTheSame = Object.keys(schedule.hours).every(halfHour => {
+          const currentPowerState = schedule.hours[halfHour];
+          const processedPowerState = processedScheduleInfo.scheduleItemHours[halfHour];
+          return currentPowerState === processedPowerState;
+        });
+
+        if (isScheduleTheSame) {
+          continue;
+        }
+      }
+
+      const dayName = date === today ? 'сьогодні' : 'завтра';
+      const scheduleTitle = processedScheduleInfo?.isSent ? `Новий графік` : `Графік`;
+
+      const messageText = new BotMessageText()
+        .addLine(BotMessageText.bold(`🗓 ${scheduleTitle} на ${dayName}`))
+        .newLine();
+      messageText.merge(this.buildDayScheduleMessage(weekSchedule, date));
+      messageText.newLine().addLine(BotMessageText.quote(`test`));
+
+      await this.botService.sendMessageToOwner(messageText);
+
+      if (processedScheduleInfoIndex === -1) {
+        this.cachedKdConfig.processedScheduleInfos.push({
+          dateIso: date.toISOString(),
+          scheduleItemHours: schedule.hours,
+          isSent: true,
+        });
+      } else {
+        this.cachedKdConfig.processedScheduleInfos[processedScheduleInfoIndex].scheduleItemHours = schedule.hours;
+        this.cachedKdConfig.processedScheduleInfos[processedScheduleInfoIndex].isSent = true;
+      }
+      await this.persistConfig();
+    }
+
+    setTimeout(() => this.handleScheduleUpdates(), config.kdFeedRequestIntervalMs);
+  }
+
   private buildDateByItemCreatedAt(created_at: number): Date {
     return new Date(created_at * 1000);
   }
@@ -461,11 +536,8 @@ export class KdService implements OnApplicationBootstrap {
     weekSchedule: IScheduleItem[],
     date: Date,
   ): BotMessageText {
-    let day = date.getDay();
-    if (day === 0) { // force to KD indexes, where Sunday is 7, not 0 (like in JS Date)
-      day = 7;
-    }
-    const daySchedule = weekSchedule.find(schedule => schedule.day_of_week === day);
+    const dayKdFormat = this.buildDayKdFormat(date);
+    const daySchedule = weekSchedule.find(schedule => schedule.day_of_week === dayKdFormat);
     const halfHours = Object.keys(daySchedule.hours).sort();
 
     const powerStatesWithRanges: { powerState: PowerState; ranges: { startHalfHour: string; endHalfHour?: string; }[] }[] = [];
@@ -541,5 +613,13 @@ export class KdService implements OnApplicationBootstrap {
     }
 
     return messageText;
+  }
+
+  private buildDayKdFormat(date: Date): number {
+    let day = date.getDay();
+    if (day === 0) { // force to KD indexes, where Sunday is 7, not 0 (like in JS Date)
+      day = 7;
+    }
+    return day;
   }
 }
