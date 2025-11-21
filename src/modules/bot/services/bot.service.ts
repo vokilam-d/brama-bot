@@ -29,6 +29,7 @@ enum ApiMethodName {
   EditMessageText = 'editMessageText',
   SendChatAction = 'sendChatAction',
   SetMessageReaction = 'setMessageReaction',
+  DeleteMessages = 'deleteMessages',
 }
 
 export enum PendingMessageType {
@@ -37,7 +38,7 @@ export enum PendingMessageType {
   SendScheduleToAll = 'sendScheduleToAll',
 }
 
-enum BotCommand {
+enum AdminBotCommand {
   Enable = '/enable',
   Disable = '/disable',
   Status = '/status',
@@ -46,7 +47,8 @@ enum BotCommand {
   SendScheduleTomorrowToAll = '/send_schedule_tomorrow_to_all',
   GetScheduleToday = '/get_schedule_today',
   GetScheduleTomorrow = '/get_schedule_tomorrow',
-  GetCommands = '/c',
+  GetCommands = '/get_commands',
+  DeleteMessages = '/del',
 }
 
 @Injectable()
@@ -126,28 +128,33 @@ export class BotService implements OnApplicationBootstrap {
 
   private async onOwnerMessage(message: ITelegramMessage): Promise<void> {
     this.logger.debug(`Handling owner message... (message=${message.text})`);
+    if (!message.text) {
+      this.logger.debug(`Handling owner message: Exiting, no text`);
+      return;
+    }
+    
     const chatId = message.chat.id;
 
     try {
       const [command, ...args] = message.text.split(' ');
       switch (command) {
-        case BotCommand.Enable:
+        case AdminBotCommand.Enable:
           await this.updateConfig('isEnabled', true);
           await this.likeMessage(chatId, message.message_id);
           await this.sendMessage(chatId, this.buildStatusText());
           break;
 
-        case BotCommand.Disable:
+        case AdminBotCommand.Disable:
           await this.updateConfig('isEnabled', false);
           await this.likeMessage(chatId, message.message_id);
           await this.sendMessage(chatId, this.buildStatusText());
           break;
 
-        case BotCommand.Status:
+        case AdminBotCommand.Status:
           await this.sendMessage(chatId, this.buildStatusText());
           break;
 
-        case BotCommand.SetGroupStatus:
+        case AdminBotCommand.SetGroupStatus:
           const groupId = parseInt(args[0]);
           const status = args[1];
 
@@ -169,34 +176,84 @@ export class BotService implements OnApplicationBootstrap {
           await this.sendMessage(chatId, this.buildStatusText());
           break;
 
-        case BotCommand.GetScheduleToday: {
+        case AdminBotCommand.GetScheduleToday: {
           this.events.emit(PendingMessageType.GetSchedule, { day: 'today', chatId });
           break;
         }
 
-        case BotCommand.GetScheduleTomorrow: {
+        case AdminBotCommand.GetScheduleTomorrow: {
           this.events.emit(PendingMessageType.GetSchedule, { day: 'tomorrow', chatId });
           break;
         }
 
-        case BotCommand.SendScheduleTodayToAll: {
+        case AdminBotCommand.SendScheduleTodayToAll: {
           this.events.emit(PendingMessageType.SendScheduleToAll, { day: 'today' });
           await this.likeMessage(chatId, message.message_id);
           break;
         }
 
-        case BotCommand.SendScheduleTomorrowToAll: {
+        case AdminBotCommand.SendScheduleTomorrowToAll: {
           this.events.emit(PendingMessageType.SendScheduleToAll, { day: 'tomorrow' });
           await this.likeMessage(chatId, message.message_id);
           break;
         }
 
-        case BotCommand.GetCommands: {
+        case AdminBotCommand.GetCommands: {
           const commandsText = new BotMessageText(BotMessageText.bold(`Commands:`));
-          for (const command of Object.values(BotCommand)) {
+          for (const command of Object.values(AdminBotCommand)) {
             commandsText.newLine().addLine(command);
           }
           await this.sendMessage(chatId, commandsText);
+          break;
+        }
+
+        case AdminBotCommand.DeleteMessages: {
+          const messageLinks = args;
+          if (!messageLinks.length) {
+            await this.sendMessage(chatId, new BotMessageText(`No message links provided, usage: /del <message link 1> <message link 2> ...`));
+            return;
+          }
+
+          const messageIdsByChatId = new Map<string, number[]>();
+          
+          for (const messageLink of messageLinks) {
+            const pathParts = messageLink.replace('https://t.me/', '').split('/');
+            if (pathParts.length < 2) {
+              await this.sendMessage(
+                chatId,
+                new BotMessageText(`Invalid message link format: ${messageLink}`),
+              );
+              continue;
+            }
+
+            let deletedMessageChatId: string;
+            let deletedMessageId: number;
+
+            if (pathParts[0] === 'c') {
+              deletedMessageChatId = `-100${pathParts[1]}`;
+              deletedMessageId = parseInt(pathParts[3] ?? pathParts[2]);
+            } else {
+              deletedMessageChatId = `@${pathParts[0]}`;
+              deletedMessageId = parseInt(pathParts[1]);
+            }
+
+            if (!messageIdsByChatId.has(deletedMessageChatId)) {
+              messageIdsByChatId.set(deletedMessageChatId, []);
+            }
+            messageIdsByChatId.get(deletedMessageChatId).push(deletedMessageId);
+          }
+
+          let totalDeleted = 0;
+          for (const [deletedMessageChatId, messageIds] of messageIdsByChatId.entries()) {
+            await this.execMethod(
+              ApiMethodName.DeleteMessages,
+              { chat_id: deletedMessageChatId, message_ids: messageIds },
+            );
+            totalDeleted += messageIds.length;
+          }
+
+          await this.likeMessage(chatId, message.message_id);
+          await this.sendMessage(chatId, new BotMessageText(`Deleted ${totalDeleted} messages`));
           break;
         }
 
@@ -208,7 +265,8 @@ export class BotService implements OnApplicationBootstrap {
     } catch (e) {
       this.logger.error(`Handling owner message: Failed:`);
       this.logger.error(e);
-      this.sendMessageToOwner(new BotMessageText(`Failed to handle owner message (message=${message.text}): ${e.message}`)).then();
+      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      this.sendMessageToOwner(new BotMessageText(`Failed to handle owner message (message=${message.text}): ${errorMessage}`)).then();
     }
   }
 
