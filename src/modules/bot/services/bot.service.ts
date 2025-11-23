@@ -141,13 +141,11 @@ export class BotService implements OnApplicationBootstrap {
         case AdminBotCommand.Enable:
           await this.updateConfig('isEnabled', true);
           await this.likeMessage(chatId, message.message_id);
-          await this.sendMessage(chatId, this.buildStatusText());
           break;
 
         case AdminBotCommand.Disable:
           await this.updateConfig('isEnabled', false);
           await this.likeMessage(chatId, message.message_id);
-          await this.sendMessage(chatId, this.buildStatusText());
           break;
 
         case AdminBotCommand.Status:
@@ -165,7 +163,7 @@ export class BotService implements OnApplicationBootstrap {
           }
 
           if (status !== 'enabled' && status !== 'disabled') {
-            await this.sendMessage(chatId, new BotMessageText(`Invalid status: ${status}`));
+            await this.sendMessage(chatId, new BotMessageText(`Invalid status: ${status}. Valid statuses: enabled, disabled`));
             return;
           }
 
@@ -252,7 +250,6 @@ export class BotService implements OnApplicationBootstrap {
             totalDeleted += messageIds.length;
           }
 
-          await this.likeMessage(chatId, message.message_id);
           await this.sendMessage(chatId, new BotMessageText(`Deleted ${totalDeleted} messages`));
           break;
         }

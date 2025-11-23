@@ -82,7 +82,9 @@ export class KdService implements OnApplicationBootstrap {
       await this.handleFeed();
 
       this.logger.debug(`Requesting schedule`);
-      await this.handleScheduleUpdates();
+      await this.handleScheduleChanges();
+
+      this.logLastTwoProcessedScheduleInfos().then();
     } catch (e) {
       this.onError(e, `Failed to init`);
     }
@@ -275,22 +277,22 @@ export class KdService implements OnApplicationBootstrap {
 
       if (isPowerToggle) {
         botMessageText.addLine(feedItem.description);
-      } else if (isScheduleToday || isScheduleTomorrow) {
-        botMessageText.prependToFirstLine('🗓 ');
+      // } else if (isScheduleToday || isScheduleTomorrow) {
+      //   botMessageText.prependToFirstLine('🗓 ');
 
-        const weekSchedule = await this.getWeekSchedule();
-        if (!weekSchedule) {
-          this.botService.sendMessageToOwner(new BotMessageText(`CRITICAL - Failed to get schedule`)).then();
-          continue;
-        }
+      //   const weekSchedule = await this.getWeekSchedule();
+      //   if (!weekSchedule) {
+      //     this.botService.sendMessageToOwner(new BotMessageText(`CRITICAL - Failed to get schedule`)).then();
+      //     continue;
+      //   }
 
-        if (isScheduleToday) {
-          botMessageText.merge(this.buildDayScheduleMessage(weekSchedule, createdDate));
-        } else if (isScheduleTomorrow) {
-          const tomorrowDate = new Date(createdDate);
-          tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-          botMessageText.merge(this.buildDayScheduleMessage(weekSchedule, tomorrowDate));
-        }
+      //   if (isScheduleToday) {
+      //     botMessageText.merge(this.buildDayScheduleMessage(weekSchedule, createdDate));
+      //   } else if (isScheduleTomorrow) {
+      //     const tomorrowDate = new Date(createdDate);
+      //     tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+      //     botMessageText.merge(this.buildDayScheduleMessage(weekSchedule, tomorrowDate));
+      //   }
       } else {
         continue;
       }
@@ -446,7 +448,7 @@ export class KdService implements OnApplicationBootstrap {
     this.logger.debug(processedFeedItem);
   }
 
-  private async handleScheduleUpdates(): Promise<void> {
+  private async handleScheduleChanges(): Promise<void> {
     const today = new Date();
     today.setHours(6, 0, 0, 0); // set to 6 hours to avoid DST/time zone issues
     const tomorrow = new Date(today);
@@ -454,7 +456,7 @@ export class KdService implements OnApplicationBootstrap {
 
     const weekSchedule = await this.getWeekSchedule();
     if (!weekSchedule) {
-      setTimeout(() => this.handleScheduleUpdates(), config.kdFeedRequestIntervalMs * 10);
+      setTimeout(() => this.handleScheduleChanges(), config.kdFeedRequestIntervalMs * 10);
       return;
     }
 
@@ -492,6 +494,8 @@ export class KdService implements OnApplicationBootstrap {
           };
           await this.kdProcessedScheduleInfoModel.create(newProcessedScheduleInfo);
         }
+
+        this.logger.debug(`Persisted processed schedule info (isNew=${!processedScheduleInfoDoc}, date=${date.toISOString()}, isSent=${isSent}, scheduleItemHours=${JSON.stringify(schedule.hours)})`);
       };
 
       const isScheduleNotSetup = Object.values(schedule.hours).some(powerState => powerState === PowerState.MaybeOff);
@@ -512,11 +516,23 @@ export class KdService implements OnApplicationBootstrap {
       messageText.merge(this.buildDayScheduleMessage(weekSchedule, date));
       messageText.newLine().addLine(BotMessageText.quote(`test`));
 
-      await this.botService.sendMessageToOwner(messageText);
+      await this.botService.sendMessageToAllEnabledGroups(messageText);
       await persistProcessedScheduleInfo(true);
     }
 
-    setTimeout(() => this.handleScheduleUpdates(), config.kdFeedRequestIntervalMs);
+    setTimeout(() => this.handleScheduleChanges(), config.kdFeedRequestIntervalMs);
+  }
+
+  private async logLastTwoProcessedScheduleInfos(): Promise<void> {
+    const lastTwoProcessedScheduleInfos = await this.kdProcessedScheduleInfoModel
+      .find()
+      .sort({ dateIso: -1 })
+      .limit(2)
+      .exec();
+    this.logger.debug(`Last two processed schedule infos:`);
+    for (const processedScheduleInfo of lastTwoProcessedScheduleInfos) {
+      this.logger.debug(JSON.stringify(processedScheduleInfo.toJSON()));
+    }
   }
 
   private buildDateByItemCreatedAt(created_at: number): Date {
