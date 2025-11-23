@@ -514,7 +514,6 @@ export class KdService implements OnApplicationBootstrap {
         .addLine(BotMessageText.bold(`🗓 ${scheduleTitle} на ${dayName}`))
         .newLine();
       messageText.merge(this.buildDayScheduleMessage(weekSchedule, date));
-      messageText.newLine().addLine(BotMessageText.quote(`test`));
 
       await this.botService.sendMessageToAllEnabledGroups(messageText);
       await persistProcessedScheduleInfo(true);
