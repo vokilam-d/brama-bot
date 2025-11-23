@@ -5,12 +5,14 @@ import { KdModule } from './modules/kyiv-digital/kd.module';
 import { BotModule } from './modules/bot/bot.module';
 import { BotService } from './modules/bot/services/bot.service';
 import { BotMessageText } from './modules/bot/helpers/bot-message-text.helper';
+import { EshopModule } from './modules/eshop/eshop.module';
 
 @Module({
   imports: [
     MongooseModule.forRoot(config.mongoUri, { retryDelay: 1 }),
     KdModule,
     BotModule,
+    EshopModule,
   ],
 })
 export class AppModule implements OnApplicationBootstrap {
@@ -23,6 +25,7 @@ export class AppModule implements OnApplicationBootstrap {
   }
 
   onApplicationBootstrap(): any {
+    this.botService.sendMessageToOwner(new BotMessageText(`Bot started`)).then();
     this.handleUnhandledExceptions();
   }
 

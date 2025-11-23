@@ -35,6 +35,9 @@ export class BotConfig {
 
   @Prop()
   appEnv: 'production' | 'development' = 'development';
+
+  @Prop()
+  eshopChatId: number;
 }
 
 export const BotConfigSchema = SchemaFactory.createForClass(BotConfig);

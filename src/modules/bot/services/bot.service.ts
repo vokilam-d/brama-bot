@@ -36,6 +36,9 @@ export enum PendingMessageType {
   AskForCode = 'askForCode',
   GetSchedule = 'getSchedule',
   SendScheduleToAll = 'sendScheduleToAll',
+  EshopSubscribe = 'eshopSubscribe',
+  EshopUnsubscribe = 'eshopUnsubscribe',
+  EshopGetInfo = 'eshopGetInfo',
 }
 
 enum AdminBotCommand {
@@ -49,6 +52,9 @@ enum AdminBotCommand {
   GetScheduleTomorrow = '/get_schedule_tomorrow',
   GetCommands = '/get_commands',
   DeleteMessages = '/del',
+  EshopSubscribe = '/eshop_subscribe',
+  EshopUnsubscribe = '/eshop_unsubscribe',
+  EshopGetInfo = '/eshop_info',
 }
 
 @Injectable()
@@ -85,7 +91,8 @@ export class BotService implements OnApplicationBootstrap {
       throw new Error(`No owner ID configured`);
     }
 
-    // this.execMethod('deleteMessages' as any, { chat_id: -1001392103291, message_ids: [71664, 71663, 71662, 71661, 71660, 71659, 71658, 71657, 71656, 71655] })
+    // const text = `🗓 <b>Новий графік на сьогодні</b>\n\nСвітло буде відсутнє:\nз 06:00 до 12:30\nз 15:30 до 20:00`
+    // this.execMethod('editMessageText' as any, { chat_id: -1002164849966, message_id: 378, text: text, parse_mode: 'HTML' });
   }
 
   async onNewIncomingMessage(update: ITelegramUpdate): Promise<void> {
@@ -94,7 +101,23 @@ export class BotService implements OnApplicationBootstrap {
     if (update.message?.reply_to_message) {
       this.onReply(update.message).then();
     } else if (this.botConfig.ownerIds.includes(senderId) && update.message?.chat?.type === 'private') {
-      this.onOwnerMessage(update.message).then();
+      this.onOwnerPrivateMessage(update.message).then();
+
+    } else if (this.botConfig.ownerIds.includes(senderId) && update.message?.text === AdminBotCommand.EshopSubscribe) {
+      this.logger.debug(`Received eshop subscribe command from owner (chatId=${update.message.chat.id})`);
+      await this.updateConfig('eshopChatId', update.message.chat.id);
+      await this.likeMessage(update.message.chat.id, update.message.message_id);
+
+    } else if (this.botConfig.ownerIds.includes(senderId) && update.message?.text === AdminBotCommand.EshopUnsubscribe) {
+      this.logger.debug(`Received eshop unsubscribe command from owner (chatId=${update.message.chat.id})`);
+      await this.updateConfig('eshopChatId', null);
+      await this.likeMessage(update.message.chat.id, update.message.message_id);
+
+    } if (update.message.chat.id === this.botConfig.eshopChatId && update.message?.text === AdminBotCommand.EshopGetInfo) {
+      this.logger.debug(`Received eshop get info command from eshop chat (chatId=${update.message.chat.id})`);
+      this.execMethod(ApiMethodName.SendChatAction, { chat_id: update.message.chat.id, action: 'typing' });
+      this.events.emit(PendingMessageType.EshopGetInfo);
+
     } else {
       if (update.message?.text === '/start' && update.message.chat.type === 'private') {
         const text = new BotMessageText(`Вітаю! Я бот для сповіщень від "Київ Цифровий" щодо відключень світла на вул. Юлії Здановської, 71-з.`)
@@ -126,7 +149,7 @@ export class BotService implements OnApplicationBootstrap {
     }
   }
 
-  private async onOwnerMessage(message: ITelegramMessage): Promise<void> {
+  private async onOwnerPrivateMessage(message: ITelegramMessage): Promise<void> {
     this.logger.debug(`Handling owner message... (message=${message.text})`);
     if (!message.text) {
       this.logger.debug(`Handling owner message: Exiting, no text`);
@@ -361,6 +384,50 @@ export class BotService implements OnApplicationBootstrap {
     return this.execMethod(ApiMethodName.SetMessageReaction, payload);
   }
 
+  async sendMessageToEshop(
+    text: BotMessageText,
+  ): Promise<void> {
+    this.logger.debug(`Sending message to eshop... (text=${text.toString()})`);
+    if (!this.botConfig.eshopChatId) {
+      this.logger.warn(`Sending message to eshop: Exiting, no eshop chat ID configured`);
+      return;
+    }
+
+    try {
+      await this.sendMessage(this.botConfig.eshopChatId, text);
+    } catch (e) {
+      this.logger.error(`Could not send message to eshop:`);
+      this.logger.error(e);
+    }
+
+    this.logger.debug(`Sending message to eshop: Finished`);
+  }
+
+  async sendPhotoToEshop(
+    photoUrl: string,
+    text: BotMessageText,
+  ): Promise<void> {
+    this.logger.debug(`Sending photo to eshop... (photoUrl=${photoUrl}, text=${text.toString()})`);
+    if (!this.botConfig.eshopChatId) {
+      this.logger.warn(`Sending photo to eshop: Exiting, no eshop chat ID configured`);
+      return;
+    }
+
+    try {
+      await this.execMethod(ApiMethodName.SendPhoto, {
+        chat_id: this.botConfig.eshopChatId,
+        photo: photoUrl,
+        caption: text.toString(),
+        parse_mode: this.textParseMode,
+      });
+    } catch (e) {
+      this.logger.error(`Could not send photo to eshop:`);
+      this.logger.error(e);
+    }
+
+    this.logger.debug(`Sending photo to eshop: Finished`);
+  }
+
   async sendMessage(
     chatId: string | number,
     text: BotMessageText,
@@ -518,8 +585,7 @@ export class BotService implements OnApplicationBootstrap {
 
         await this.botSentMessageModel.create(sentMessageDocContents);
 
-        this.logger.debug(`Persisted sent message:`);
-        this.logger.debug(sentMessageDocContents);
+        this.logger.debug(`Persisted sent message: ${JSON.stringify(sentMessageDocContents)}`);
       } catch (e) {
         this.logger.error(`Could not persist sent message:`);
         this.logger.error(e);
