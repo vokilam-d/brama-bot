@@ -15,6 +15,7 @@ import { IScheduleItem, IScheduleResponse, PowerState } from '../interfaces/sche
 import { wait } from '../../../helpers/wait.function';
 import { pad } from '../../../helpers/pad.function';
 import { IDtekObjectsResponse } from '../interfaces/dtek-response.interface';
+import { getMonthName } from 'src/helpers/get-month-name.helper';
 
 // login method 0 - sms, input 4 digits
 // login method 1 - incoming call, input last 3 digits of phone number
@@ -325,8 +326,9 @@ export class KdService implements OnApplicationBootstrap {
       dayName = 'завтра';
     }
 
-    const messageText = new BotMessageText()
-      .addLine(BotMessageText.bold(`🗓 Графік на ${dayName}`))
+    const scheduleTitleWithDay = BotMessageText.bold(`🗓 Графік на ${dayName}`);
+    const messageText = new BotMessageText(`${scheduleTitleWithDay} (${date.getDate()} ${getMonthName(date)})`)
+      .newLine()
       .newLine();
     messageText.merge(this.buildDayScheduleMessage(weekSchedule, date));
 
@@ -510,8 +512,9 @@ export class KdService implements OnApplicationBootstrap {
 
       this.logger.debug(`Schedule updated (date=${date.toISOString()}, scheduleTitle=${scheduleTitle}, dayName=${dayName}, hours=${JSON.stringify(schedule.hours)}, processedHours=${JSON.stringify(processedScheduleInfoDoc?.toJSON().scheduleItemHours)})`);
 
-      const messageText = new BotMessageText()
-        .addLine(BotMessageText.bold(`🗓 ${scheduleTitle} на ${dayName}`))
+      const scheduleTitleWithDay = BotMessageText.bold(`🗓 ${scheduleTitle} на ${dayName}`);
+      const messageText = new BotMessageText(`${scheduleTitleWithDay} (${date.getDate()} ${getMonthName(date)})`)
+        .newLine()
         .newLine();
       messageText.merge(this.buildDayScheduleMessage(weekSchedule, date));
 
