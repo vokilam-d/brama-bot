@@ -19,7 +19,7 @@ export class EshopService implements OnApplicationBootstrap, OnApplicationShutdo
   }
 
   async onApplicationBootstrap(): Promise<void> {
-    this.init().then();
+    // this.init().then();
 
     this.botService.events.on(PendingMessageType.EshopGetInfo, () => {
       this.sendEshopInfo().then();
