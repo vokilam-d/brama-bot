@@ -53,9 +53,12 @@ export class KdService implements OnApplicationBootstrap {
     this.botService.events.on(PendingMessageType.AskForCode, code => {
       this.logger.debug({ code });
     });
-    this.botService.events.on(PendingMessageType.GetSchedule, (options: { day: 'today' | 'tomorrow'; chatId: number; }) => {
-      this.sendScheduleToChat(options.day, options.chatId).then();
-    });
+    this.botService.events.on(
+      PendingMessageType.GetSchedule,
+      (options: { day: 'today' | 'tomorrow'; chatId: number; }) => {
+        this.sendScheduleToChat(options.day, options.chatId).then();
+      },
+    );
     this.botService.events.on(PendingMessageType.SendScheduleToAll, (options: { day: 'today' | 'tomorrow'; }) => {
       this.sendScheduleToChat(options.day, undefined, true).then();
     });
@@ -154,7 +157,7 @@ export class KdService implements OnApplicationBootstrap {
     this.logger.debug(`Refreshing token finished`);
   }
 
-  private async handleFeed(): Promise<void> {
+  private async handleFeed(tryCount: number = 1): Promise<void> {
     if (!this.cachedKdConfig.accessToken) {
       const message = `Failed to get feed: no access token`;
       this.logger.error(message);
@@ -163,7 +166,7 @@ export class KdService implements OnApplicationBootstrap {
     }
 
     if (!this.isDtekObjectAvailable) {
-      setTimeout(() => this.handleFeed(), config.kdFeedRequestIntervalMs);
+      setTimeout(() => this.handleFeed(), config.kdDtekObjectsRequestIntervalMs);
       return;
     }
 
@@ -175,14 +178,16 @@ export class KdService implements OnApplicationBootstrap {
     let response: AxiosResponse<IFeedResponse>;
     try {
       response = await firstValueFrom(this.httpService.request<IFeedResponse>(requestConfig));
+
+      tryCount = 1;
     } catch (e) {
-      this.onError(e, `Failed to get feed`);
+      this.onError(e, `Failed to get feed`, tryCount >= 3);
 
       const noAuthStatuses = [401, 403];
       if (!noAuthStatuses.includes((e as AxiosError).response?.status)) {
-        const nextRequestDelay = config.kdFeedRequestIntervalMs * 5;
+        const nextRequestDelay = config.kdFeedRequestIntervalMs * 10;
         this.logger.warn(`Re-fetching feed in "${nextRequestDelay / 1000} sec"...`);
-        setTimeout(() => this.handleFeed(), config.kdFeedRequestIntervalMs * 10);
+        setTimeout(() => this.handleFeed(tryCount + 1), nextRequestDelay);
       }
 
       return;
@@ -236,7 +241,7 @@ export class KdService implements OnApplicationBootstrap {
 
     const schedulesDisabledTitle = `Графік не діє`;
     const relevantFeedItems = feed
-      .filter(feedItem => feedItem.id.startsWith(FeedItemIdPrefix.POWER) || feedItem.title.includes(schedulesDisabledTitle))
+      .filter(feedItem => `${feedItem.id}`.startsWith(FeedItemIdPrefix.POWER) || feedItem.title?.includes(schedulesDisabledTitle))
       .reverse();
 
     const processedFeedItems: IFeedItem[] = [];
@@ -347,13 +352,13 @@ export class KdService implements OnApplicationBootstrap {
     try {
       response = await firstValueFrom(this.httpService.request<IScheduleResponse>(requestConfig));
     } catch (e) {
-      this.onError(e, `Failed to get schedule`);
+      this.onError(e, `Failed to get schedule`, tryCount >= 3);
 
       const noAuthStatuses = [401, 403];
       if (tryCount <= 3 && !noAuthStatuses.includes((e as AxiosError).response?.status)) {
-        const nextRequestDelay = config.kdFeedRequestIntervalMs * 5;
+        const nextRequestDelay = config.kdFeedRequestIntervalMs * 10;
         this.logger.warn(`Re-fetching schedule in "${nextRequestDelay / 1000} sec"...`);
-        await wait(config.kdFeedRequestIntervalMs * 10);
+        await wait(nextRequestDelay);
         return this.getWeekSchedule(tryCount + 1);
       }
 
@@ -363,7 +368,7 @@ export class KdService implements OnApplicationBootstrap {
     return response.data.schedule;
   }
 
-  private async checkDtekObject(): Promise<void> {
+  private async checkDtekObject(tryCount: number = 1): Promise<void> {
     const url = `${this.apiHost}/v3/dtek`;
     const requestConfig = this.buildRequestConfig('get', url);
 
@@ -379,11 +384,15 @@ export class KdService implements OnApplicationBootstrap {
         this.isDtekObjectAvailable = true;
         this.logger.log(`Dtek object found (id=${config.dtekObjectId})`);
       }
+
+      tryCount = 1;
     } catch (e) {
-      this.onError(e, `Failed to check Dtek objects`);
+      this.onError(e, `Failed to check Dtek objects`, tryCount >= 3);
+
+      tryCount++;
     }
 
-    setTimeout(() => this.checkDtekObject(), config.kdDtekObjectsRequestIntervalMs);
+    setTimeout(() => this.checkDtekObject(tryCount), config.kdDtekObjectsRequestIntervalMs);
   }
 
   private buildRequestConfig(method: 'get', url: string) {
@@ -541,7 +550,7 @@ export class KdService implements OnApplicationBootstrap {
     return new Date(created_at * 1000);
   }
 
-  private onError(error: AxiosError, description: string) {
+  private onError(error: AxiosError, description: string, sendToOwner: boolean = true) {
     this.logger.error(description);
 
     let message: string = error.message;
@@ -554,7 +563,9 @@ export class KdService implements OnApplicationBootstrap {
       this.logger.error(error.response?.data);
     }
 
-    this.botService.sendMessageToOwner(new BotMessageText(`${description}: ${message}`)).then();
+    if (sendToOwner) {
+      this.botService.sendMessageToOwner(new BotMessageText(`${description}: ${message}`)).then();
+    }
   }
 
   private buildDayScheduleMessage(
@@ -565,7 +576,10 @@ export class KdService implements OnApplicationBootstrap {
     const daySchedule = weekSchedule.find(schedule => schedule.day_of_week === dayKdFormat);
     const halfHours = Object.keys(daySchedule.hours).sort();
 
-    const powerStatesWithRanges: { powerState: PowerState; ranges: { startHalfHour: string; endHalfHour?: string; }[] }[] = [];
+    const powerStatesWithRanges: {
+      powerState: PowerState;
+      ranges: { startHalfHour: string; endHalfHour?: string; }[];
+    }[] = [];
 
     for (let i = 0; i < halfHours.length; i++) {
       const halfHour = halfHours[i];
