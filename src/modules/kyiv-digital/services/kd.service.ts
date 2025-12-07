@@ -15,7 +15,8 @@ import { IScheduleItem, IScheduleResponse, PowerState } from '../interfaces/sche
 import { wait } from '../../../helpers/wait.function';
 import { pad } from '../../../helpers/pad.function';
 import { IDtekObjectsResponse } from '../interfaces/dtek-response.interface';
-import { getMonthName } from 'src/helpers/get-month-name.helper';
+import { getMonthName } from '../../../helpers/get-month-name.helper';
+import { getDayName } from '../../../helpers/get-day-name.helper';
 
 // login method 0 - sms, input 4 digits
 // login method 1 - incoming call, input last 3 digits of phone number
@@ -78,20 +79,20 @@ export class KdService implements OnApplicationBootstrap {
       await this.ensureAndCacheConfig();
       await this.cacheProcessedFeedItems();
       await this.validatePersistedToken();
-
-      this.logger.debug(`Dtek object id=${config.dtekObjectId}, checking it`);
-      await this.checkDtekObject();
-
-      this.logger.debug(`Requesting feed`);
-      await this.handleFeed();
-
-      this.logger.debug(`Requesting schedule`);
-      await this.handleScheduleChanges();
-
-      this.logLastTwoProcessedScheduleInfos().then();
     } catch (e) {
       this.onError(e, `Failed to init`);
     }
+
+    this.logger.debug(`Dtek object id=${config.dtekObjectId}, checking it`);
+    this.checkDtekObject().then();
+
+    this.logger.debug(`Requesting feed`);
+    this.handleFeed().then();
+
+    this.logger.debug(`Requesting schedule`);
+    this.handleScheduleChanges().then();
+
+    this.logLastTwoProcessedScheduleInfos().then();
   }
 
   private async ensureAndCacheConfig(): Promise<void> {
@@ -516,13 +517,12 @@ export class KdService implements OnApplicationBootstrap {
         continue;
       }
 
-      const dayName = date === today ? 'сьогодні' : 'завтра';
       const scheduleTitle = processedScheduleInfoDoc?.isSent ? `Новий графік` : `Графік`;
 
-      this.logger.debug(`Schedule updated (date=${date.toISOString()}, scheduleTitle=${scheduleTitle}, dayName=${dayName}, hours=${JSON.stringify(schedule.hours)}, processedHours=${JSON.stringify(processedScheduleInfoDoc?.toJSON().scheduleItemHours)})`);
+      this.logger.debug(`Schedule updated (date=${date.toISOString()}, scheduleTitle=${scheduleTitle}, hours=${JSON.stringify(schedule.hours)}, processedHours=${JSON.stringify(processedScheduleInfoDoc?.toJSON().scheduleItemHours)})`);
 
-      const scheduleTitleWithDay = BotMessageText.bold(`🗓 ${scheduleTitle} на ${dayName}`);
-      const messageText = new BotMessageText(`${scheduleTitleWithDay} (${date.getDate()} ${getMonthName(date)})`)
+      const messageText = new BotMessageText()
+        .addLine(BotMessageText.bold(`🗓 ${scheduleTitle} на ${date.getDate()} ${getMonthName(date)}, ${getDayName(date)}`))
         .newLine()
         .newLine();
       messageText.merge(this.buildDayScheduleMessage(weekSchedule, date));
