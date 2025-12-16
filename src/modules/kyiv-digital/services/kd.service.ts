@@ -473,8 +473,8 @@ export class KdService implements OnApplicationBootstrap {
     }
 
     for (const date of [today, tomorrow]) {
-      const dayKdFormat = this.buildDayKdFormat(date);
-      const schedule = weekSchedule.find(schedule => schedule.day_of_week === dayKdFormat);
+      const dayInKdFormat = this.buildDayInKdFormat(date);
+      const schedule = weekSchedule.find(schedule => schedule.day_of_week === dayInKdFormat);
       if (!schedule) {
         this.botService.sendMessageToOwner(new BotMessageText(`CRITICAL - No schedule found for date ${date.toISOString()}`)).then();
         continue;
@@ -523,7 +523,6 @@ export class KdService implements OnApplicationBootstrap {
 
       const messageText = new BotMessageText()
         .addLine(BotMessageText.bold(`🗓 ${scheduleTitle} на ${date.getDate()} ${getMonthName(date)}, ${getDayName(date)}`))
-        .newLine()
         .newLine();
       messageText.merge(this.buildDayScheduleMessage(weekSchedule, date));
 
@@ -572,7 +571,7 @@ export class KdService implements OnApplicationBootstrap {
     weekSchedule: IScheduleItem[],
     date: Date,
   ): BotMessageText {
-    const dayKdFormat = this.buildDayKdFormat(date);
+    const dayKdFormat = this.buildDayInKdFormat(date);
     const daySchedule = weekSchedule.find(schedule => schedule.day_of_week === dayKdFormat);
     const halfHours = Object.keys(daySchedule.hours).sort();
 
@@ -654,7 +653,7 @@ export class KdService implements OnApplicationBootstrap {
     return messageText;
   }
 
-  private buildDayKdFormat(date: Date): number {
+  private buildDayInKdFormat(date: Date): number {
     let day = date.getDay();
     if (day === 0) { // force to KD indexes, where Sunday is 7, not 0 (like in JS Date)
       day = 7;
