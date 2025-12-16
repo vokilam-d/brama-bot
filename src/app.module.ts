@@ -34,7 +34,7 @@ export class AppModule implements OnApplicationBootstrap {
       this.logger.error('unhandledRejection:');
       this.logger.error(reason, (reason as Error).stack);
 
-      this.botService.sendMessageToOwner(new BotMessageText(`unhandledRejection: ${JSON.stringify(reason)}`)).then();
+      this.botService.sendMessageToOwner(new BotMessageText(`unhandledRejection: ${reason}`)).then();
     });
   }
 }
