@@ -113,13 +113,13 @@ export class BotService implements OnApplicationBootstrap {
       await this.updateConfig('eshopChatId', null);
       await this.likeMessage(update.message.chat.id, update.message.message_id);
 
-    } if (update.message.chat.id === this.botConfig.eshopChatId && update.message?.text === AdminBotCommand.EshopGetInfo) {
+    } if (update.message?.chat.id === this.botConfig.eshopChatId && update.message?.text === AdminBotCommand.EshopGetInfo) {
       this.logger.debug(`Received eshop get info command from eshop chat (chatId=${update.message.chat.id})`);
       this.execMethod(ApiMethodName.SendChatAction, { chat_id: update.message.chat.id, action: 'typing' });
       this.events.emit(PendingMessageType.EshopGetInfo);
 
     } else {
-      if (update.message?.text === '/start' && update.message.chat.type === 'private') {
+      if (update.message?.text === '/start' && update.message?.chat.type === 'private') {
         const text = new BotMessageText(`Вітаю! Я бот для сповіщень від "Київ Цифровий" щодо відключень світла на вул. Юлії Здановської, 71-з.`)
           .newLine()
           .addLine(`Для отримання сповіщень, можете підписатись на канал: ${BotMessageText.link({ url: 'https://t.me/brama_kyiv_digital' }, 't.me/brama_kyiv_digital')}.`)
@@ -141,7 +141,7 @@ export class BotService implements OnApplicationBootstrap {
       try {
         await this.botIncomingMessageModel.create({ message });
 
-        await this.sendMessageToOwner(new BotMessageText(BotMessageText.code(JSON.stringify(message), 'json')));
+        await this.sendMessageToOwner(new BotMessageText(BotMessageText.code(JSON.stringify(message, null, 2), 'json')));
       } catch (e) {
         this.logger.error(`Creating incoming message: Failed:`);
         this.logger.error(e);
@@ -155,7 +155,7 @@ export class BotService implements OnApplicationBootstrap {
       this.logger.debug(`Handling owner message: Exiting, no text`);
       return;
     }
-    
+
     const chatId = message.chat.id;
 
     try {
@@ -236,7 +236,7 @@ export class BotService implements OnApplicationBootstrap {
           }
 
           const messageIdsByChatId = new Map<string, number[]>();
-          
+
           for (const messageLink of messageLinks) {
             const pathParts = messageLink.replace('https://t.me/', '').split('/');
             if (pathParts.length < 2) {
