@@ -10,4 +10,5 @@ export const config = {
   kdFeedRequestIntervalMs: 15 * 1000, // 15 sec
   kdDtekObjectsRequestIntervalMs: 60 * 1000, // 1 min
   appEnv: process.env.APP_ENV,
+  socks5Proxy: process.env.SOCKS5_PROXY,
 };

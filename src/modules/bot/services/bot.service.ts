@@ -15,6 +15,7 @@ import { EventEmitter } from 'events';
 import { BotSentMessage } from '../schemas/bot-sent-message.schema';
 import { BotIncomingMessage } from '../schemas/bot-incoming-message.schema';
 import { ITelegramUpdate } from '../interfaces/telegram-update.interface';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 
 export type ReplyMarkup = ITelegramInlineKeyboardMarkup | ITelegramReplyKeyboardMarkup | ITelegramReplyKeyboardRemove;
 
@@ -489,12 +490,24 @@ export class BotService implements OnApplicationBootstrap {
 
   private async execMethod<T = any>(methodName: ApiMethodName, data: any): Promise<T> {
     const url = `${this.apiHost}/bot${this.token}/${methodName}`;
+    let httpsAgent = null;
 
     this.logger.debug(`Executing method:...`);
-    this.logger.debug({ url, data });
+    this.logger.debug({ url, data, hasSocks5Proxy: !!config.socks5Proxy });
+
+    if (config.socks5Proxy) {
+      httpsAgent = new SocksProxyAgent(config.socks5Proxy);
+    }
 
     try {
-      const response = await firstValueFrom(this.httpService.post<{ ok: boolean; result: T }>(url, data));
+      const response = await firstValueFrom(this.httpService.post<{ ok: boolean; result: T }>(
+        url,
+        data,
+        {
+          httpsAgent: httpsAgent,
+        },
+      ));
+
       if (response.data?.ok !== true) {
         throw response.data;
       }
