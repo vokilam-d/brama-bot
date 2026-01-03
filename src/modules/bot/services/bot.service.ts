@@ -40,6 +40,7 @@ export enum PendingMessageType {
   EshopSubscribe = 'eshopSubscribe',
   EshopUnsubscribe = 'eshopUnsubscribe',
   EshopGetInfo = 'eshopGetInfo',
+  GetPowerStatus = 'getPowerStatus',
 }
 
 enum AdminBotCommand {
@@ -56,6 +57,8 @@ enum AdminBotCommand {
   EshopSubscribe = '/eshop_subscribe',
   EshopUnsubscribe = '/eshop_unsubscribe',
   EshopGetInfo = '/eshop_info',
+  PowerStatusGroup = '/power_status_group',
+  GetPowerStatus = '/get_power_status',
 }
 
 @Injectable()
@@ -118,6 +121,17 @@ export class BotService implements OnApplicationBootstrap {
       this.logger.debug(`Received eshop get info command from eshop chat (chatId=${update.message.chat.id})`);
       this.execMethod(ApiMethodName.SendChatAction, { chat_id: update.message.chat.id, action: 'typing' });
       this.events.emit(PendingMessageType.EshopGetInfo);
+
+    } else if (update.message?.chat.id === this.botConfig.powerStatusGroupId && update.message?.text === AdminBotCommand.GetPowerStatus) {
+      this.logger.debug(`Received get power status command from power status group (chatId=${update.message.chat.id})`);
+      this.execMethod(ApiMethodName.SendChatAction, { chat_id: update.message.chat.id, action: 'typing' });
+      const replyParameters: ITelegramReplyParameters = { message_id: update.message.message_id };
+      this.events.emit(PendingMessageType.GetPowerStatus, { replyParameters });
+
+    } else if (this.botConfig.ownerIds.includes(senderId) && update.message?.text === AdminBotCommand.PowerStatusGroup) {
+      this.logger.debug(`Received power status group command from owner (chatId=${update.message.chat.id})`);
+      await this.updateConfig('powerStatusGroupId', update.message.chat.id);
+      await this.likeMessage(update.message.chat.id, update.message.message_id);
 
     } else {
       if (update.message?.text === '/start' && update.message?.chat.type === 'private') {
@@ -346,9 +360,11 @@ export class BotService implements OnApplicationBootstrap {
       } catch (e) {
         const message = `Could not send message to group`;
         this.logger.error(message);
-        this.logger.error({ group });
-        this.logger.error(e, e.stack);
-        this.sendMessageToOwner(new BotMessageText(message)).then();
+        this.logger.error(e);
+        this.logger.debug({ group });
+
+        const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+        this.sendMessageToOwner(new BotMessageText(`${message}: ${errorMessage}`)).then();
       }
     }
 
@@ -397,11 +413,49 @@ export class BotService implements OnApplicationBootstrap {
     try {
       await this.sendMessage(this.botConfig.eshopChatId, text);
     } catch (e) {
-      this.logger.error(`Could not send message to eshop:`);
+      const message = `Could not send message to eshop`;
+      this.logger.error(message);
       this.logger.error(e);
+
+      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      this.sendMessageToOwner(new BotMessageText(`${message}: ${errorMessage}`)).then();
     }
 
     this.logger.debug(`Sending message to eshop: Finished`);
+  }
+
+  async sendMessageToPowerStatusGroup(
+    text: BotMessageText,
+    options: {
+      replyParameters?: ITelegramReplyParameters;
+      disableNotification?: boolean;
+    } = {},
+  ): Promise<void> {
+    this.logger.debug(`Sending message to power status group... (text=${text.toString()})`);
+    if (!this.botConfig.powerStatusGroupId) {
+      this.logger.warn(`Sending message to power status group: Exiting, no power status group chat ID configured`);
+      return;
+    }
+
+    try {
+      await this.sendMessage(
+        this.botConfig.powerStatusGroupId,
+        text,
+        {
+          replyParameters: options.replyParameters,
+          disableNotification: options.disableNotification,
+        },
+      );
+    } catch (e) {
+      const message = `Could not send message to power status group`;
+      this.logger.error(message);
+      this.logger.error(e);
+
+      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      this.sendMessageToOwner(new BotMessageText(`${message}: ${errorMessage}`)).then();
+    }
+
+    this.logger.debug(`Sending message to power status group: Finished`);
   }
 
   async sendPhotoToEshop(
@@ -436,6 +490,7 @@ export class BotService implements OnApplicationBootstrap {
       messageThreadId?: number,
       replyParameters?: ITelegramReplyParameters,
       replyMarkup?: ReplyMarkup,
+      disableNotification?: boolean,
     } = {},
   ): Promise<ITelegramMessage[]> {
     let textStr = this.escapeStr(text.toString());
@@ -453,6 +508,9 @@ export class BotService implements OnApplicationBootstrap {
     }
     if (options.replyMarkup) {
       payload.reply_markup = options.replyMarkup;
+    }
+    if (options.disableNotification) {
+      payload.disable_notification = options.disableNotification;
     }
 
     const sentMessages: ITelegramMessage[] = [];
