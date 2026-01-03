@@ -1,0 +1,108 @@
+esphome:
+  name: power-sensor
+  on_boot:
+    priority: 600
+    then:
+      - logger.log: ">>> BOOT: Waiting for Wi-Fi..."
+      - wait_until:
+          wifi.connected:
+      - logger.log: ">>> BOOT: Wi-Fi connected! Sending power status"
+      - script.execute: send_power_status
+      - logger.log: ">>> BOOT: Waiting delay, and then toggling status LED"
+      - delay: 500ms
+      - if:
+          condition:
+            lambda: 'return id(power_available).state;'
+          then:
+            - light.turn_on: status_led
+            - logger.log: ">>> BOOT: LED turned ON (power detected)"
+          else:
+            - light.turn_off: status_led
+            - logger.log: ">>> BOOT: LED turned OFF (no power)"
+
+esp8266:
+  board: d1_mini
+
+output:
+  - platform: esp8266_pwm
+    id: builtin_led_output
+    pin:
+      number: D4
+      inverted: true
+
+light:
+  - platform: binary
+    name: "Status LED"
+    id: status_led
+    output: builtin_led_output
+
+sensor:
+  - platform: adc
+    pin: A0
+    name: "Battery Voltage"
+    id: battery_voltage
+    update_interval: 30s
+    filters:
+      - multiply: 4.14
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: D5
+      mode: INPUT
+    name: "Power Available"
+    id: power_available
+    device_class: power
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+    on_press:
+      then:
+        - logger.log: ">>> EVENT: Power RESTORED"
+        - light.turn_on: status_led
+        - script.execute: send_power_status
+    on_release:
+      then:
+        - logger.log: ">>> EVENT: Power LOST"
+        - light.turn_off: status_led
+        - script.execute: send_power_status
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: "Europe/Kyiv"
+
+http_request:
+  useragent: esphome/device
+  timeout: 5s
+  verify_ssl: false
+
+script:
+  - id: send_power_status
+    mode: restart
+    then:
+      - logger.log:
+          format: ">>> REQUEST: Power: %s | Battery: %.2fV"
+          args: ['id(power_available).state ? "ON" : "OFF"', 'id(battery_voltage).state']
+      - http_request.post:
+          url: https://klondike.com.ua/brama-bot/api/v1/power-sensor
+          json: |-
+            root["hasPower"] = id(power_available).state;
+            root["batteryVoltage"] = id(battery_voltage).state;
+            root["timestampIso"] = id(sntp_time).utcnow().strftime("%Y-%m-%dT%H:%M:%SZ");
+          request_headers:
+            Content-Type: application/json
+          on_response:
+            then:
+              - logger.log: "Request sent successfully"
+
+wifi:
+  ssid: "@Ruijie-sD2F3"
+  password: "admin123"
+
+logger:
+api:
+ota:
+  - platform: esphome

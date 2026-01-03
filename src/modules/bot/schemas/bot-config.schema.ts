@@ -38,6 +38,9 @@ export class BotConfig {
 
   @Prop()
   eshopChatId: number;
+
+  @Prop()
+  powerStatusGroupId: number;
 }
 
 export const BotConfigSchema = SchemaFactory.createForClass(BotConfig);
