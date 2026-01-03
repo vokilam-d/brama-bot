@@ -1,0 +1,87 @@
+esphome:
+  name: power-sensor
+  # Отправка статуса при старте устройства (когда свет включили)
+  on_boot:
+    priority: -100
+    then:
+      - logger.log: ">>> BOOT: Waiting for Wi-Fi before sending initial status..."
+      - wait_until:
+          wifi.connected:
+      - logger.log: ">>> BOOT: Wi-Fi connected! Sending status..."
+      - script.execute: send_power_status
+
+esp8266:
+  board: d1_mini
+
+# Настройка HTTP-клиента
+http_request:
+  useragent: esphome/device
+  timeout: 5s
+  verify_ssl: false # Важно для скорости на ESP8266
+
+# Настройка Wi-Fi из твоего конфига
+wifi:
+  ssid: "@Ruijie-sD2F3"
+  password: "admin123"
+  ap:
+    ssid: "Power Sensor Fallback Hotspot"
+    password: "CapeDr8HF1w6"
+
+# Датчик на пине D5 (GPIO14)
+binary_sensor:
+  - platform: gpio
+    pin: 
+      number: D5
+      mode: INPUT
+    name: "Power Available"
+    id: power_available
+    device_class: power
+    filters:
+      - delayed_on: 50ms
+      - delayed_off: 50ms
+    # Когда питание появилось (логическая 1)
+    on_press:
+      then:
+        - logger.log: ">>> EVENT: Power RESTORED (D5 HIGH)"
+        - script.execute: send_power_status
+    # Когда питание пропало (логический 0)
+    on_release:
+      then:
+        - logger.log: ">>> EVENT: Power LOST (D5 LOW)"
+        - script.execute: send_power_status
+
+# Единый скрипт для отправки данных
+# Единый скрипт для отправки данных
+script:
+  - id: send_power_status
+    mode: restart
+    then:
+      - logger.log:
+          format: ">>> REQUEST: Sending HTTP POST. Power status: %s"
+          args: ['id(power_available).state ? "ON" : "OFF"']
+      - http_request.post:
+          url: https://klondike.com.ua/brama-bot/api/v1/power-sensor
+          json: |-
+            root["hasPower"] = id(power_available).state;
+          request_headers:
+            Content-Type: application/json
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  ESP_LOGD("http_request", "<<< RESPONSE: Received code %d", response->status_code);
+                  ESP_LOGD("http_request", "<<< BODY: %s", body.c_str());
+          on_error:
+            then:
+              - logger.log: "!!! ERROR: Request failed. Check your network or URL."
+
+# Стандартные сервисы
+logger:
+api:
+  password: ""
+ota:
+  - platform: esphome
+    password: ""
+captive_portal:
+status_led:
+  pin: GPIO2

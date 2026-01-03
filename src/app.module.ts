@@ -6,6 +6,7 @@ import { BotModule } from './modules/bot/bot.module';
 import { BotService } from './modules/bot/services/bot.service';
 import { BotMessageText } from './modules/bot/helpers/bot-message-text.helper';
 import { EshopModule } from './modules/eshop/eshop.module';
+import { PowerSensorModule } from './modules/power-sensor/power-sensor.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { EshopModule } from './modules/eshop/eshop.module';
     KdModule,
     BotModule,
     EshopModule,
+    PowerSensorModule,
   ],
 })
 export class AppModule implements OnApplicationBootstrap {
