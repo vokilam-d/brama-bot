@@ -46,9 +46,9 @@ export class PowerSensorService implements OnApplicationBootstrap {
     this.logger.debug(`Received power sensor message: ${JSON.stringify(dto)}`);
 
     try {
-      const currentStatus = dto.hasPower;
-      if (typeof currentStatus !== 'boolean') {
-        const message = `Power status is not a boolean: "${currentStatus}"`;
+      const newHasPower = dto.hasPower;
+      if (typeof newHasPower !== 'boolean') {
+        const message = `Power status is not a boolean: "${newHasPower}"`;
         this.logger.error(message);
         this.botService.sendMessageToOwner(new BotMessageText(message)).then();
         return;
@@ -56,15 +56,15 @@ export class PowerSensorService implements OnApplicationBootstrap {
 
       const lastStatus = await this.getCurrentPowerStatus();
 
-      if (lastStatus.hasPower !== null && lastStatus.hasPower === currentStatus) {
-        this.logger.debug(`Power status unchanged: "${currentStatus}", skipping notification`);
+      if (lastStatus.hasPower !== null && lastStatus.hasPower === newHasPower) {
+        this.logger.debug(`Power status unchanged: "${newHasPower}", skipping notification`);
         return;
       }
 
-      this.logger.log(`Power status changed: ${lastStatus.hasPower} -> ${currentStatus}, sending notification`);
+      this.logger.log(`Power status changed: "${lastStatus.hasPower}" -> "${newHasPower}", sending notification`);
 
       const timestamp = dto.timestampIso ? new Date(dto.timestampIso) : new Date();
-      const title = currentStatus ? '🔋 Світло дали!' : '🪫 Світло вимкнули';
+      const title = newHasPower ? '🔋 Світло дали!' : '🪫 Світло вимкнули';
       const padTime = (time: number) => time.toString().padStart(2, '0');
 
       const messageText = new BotMessageText()
@@ -74,13 +74,13 @@ export class PowerSensorService implements OnApplicationBootstrap {
       await this.botService.sendMessageToPowerStatusGroup(
         messageText,
         {
-          disableNotification: !currentStatus,
+          disableNotification: !newHasPower,
         },
       );
 
       await this.powerStatusModel.findOneAndUpdate(
         {},
-        { isPowerOn: currentStatus, timestamp: timestamp },
+        { isPowerOn: newHasPower, timestamp: timestamp },
         { upsert: true },
       );
     } catch (error) {

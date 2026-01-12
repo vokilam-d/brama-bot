@@ -1,10 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { HttpService } from '@nestjs/axios';
-import { BotConfig } from '../schemas/bot-config.schema';
 import { config } from '../../../config';
-import { firstValueFrom } from 'rxjs';
 import { BotMessageText } from '../helpers/bot-message-text.helper';
 import { ITelegramReplyParameters } from '../interfaces/telegram-reply-parameters.interface';
 import { ITelegramInlineKeyboardMarkup } from '../interfaces/inline-keyboard-markup.interface';
@@ -15,23 +12,13 @@ import { EventEmitter } from 'events';
 import { BotSentMessage } from '../schemas/bot-sent-message.schema';
 import { BotIncomingMessage } from '../schemas/bot-incoming-message.schema';
 import { ITelegramUpdate } from '../interfaces/telegram-update.interface';
-import { SocksProxyAgent } from 'socks-proxy-agent';
+import {
+  TelegramApiService,
+  ApiMethodName,
+} from './telegram-api.service';
+import { BotConfigService } from './bot-config.service';
 
 export type ReplyMarkup = ITelegramInlineKeyboardMarkup | ITelegramReplyKeyboardMarkup | ITelegramReplyKeyboardRemove;
-
-enum ApiMethodName {
-  SendMessage = 'sendMessage',
-  SendPhoto = 'sendPhoto',
-  SendMediaGroup = 'sendMediaGroup',
-  GetMe = 'getMe',
-  SetMyCommands = 'setMyCommands',
-  AnswerCallbackQuery = 'answerCallbackQuery',
-  SetWebhook = 'setWebhook',
-  EditMessageText = 'editMessageText',
-  SendChatAction = 'sendChatAction',
-  SetMessageReaction = 'setMessageReaction',
-  DeleteMessages = 'deleteMessages',
-}
 
 export enum PendingMessageType {
   AskForCode = 'askForCode',
@@ -67,100 +54,176 @@ export class BotService implements OnApplicationBootstrap {
   events = new EventEmitter();
 
   private readonly logger = new Logger(BotService.name);
-  private botConfig: BotConfig;
 
   private pendingMessages: { type: PendingMessageType, chatId: number, messageId: number, }[] = [];
 
   private readonly maxMessageTextSize = 4000;
-  private readonly apiHost = `https://api.telegram.org`;
-  private readonly token = config.botToken;
-  private readonly tooManyRequestsErrorCode = 429;
   private readonly textParseMode = 'HTML';
   private readonly supportedTags: string[] = ['b', 'i', 'a', 'pre', 'code', 'blockquote'];
 
   constructor(
-    @InjectModel(BotConfig.name) private botConfigModel: Model<BotConfig>,
     @InjectModel(BotSentMessage.name) private botSentMessageModel: Model<BotSentMessage>,
     @InjectModel(BotIncomingMessage.name) private botIncomingMessageModel: Model<BotIncomingMessage>,
-    private readonly httpService: HttpService,
+    private readonly telegramApiService: TelegramApiService,
+    private readonly botConfigService: BotConfigService,
   ) {
   }
 
   async onApplicationBootstrap(): Promise<void> {
     // this.setWebhook();
 
-    await this.ensureAndCacheConfig();
+    await this.botConfigService.ensureAndCacheConfig();
 
-    if (!this.botConfig.ownerIds[0]) {
+    const botConfig = this.botConfigService.getConfig();
+    if (!botConfig.ownerIds[0]) {
       throw new Error(`No owner ID configured`);
     }
 
     // const text = `🗓 <b>Новий графік на сьогодні</b>\n\nСвітло буде відсутнє:\nз 06:00 до 12:30\nз 15:30 до 20:00`
-    // this.execMethod('editMessageText' as any, { chat_id: -1002164849966, message_id: 378, text: text, parse_mode: 'HTML' });
+    // this.telegramApiService.execMethod('editMessageText' as any, { chat_id: -1002164849966, message_id: 378, text: text, parse_mode: 'HTML' });
   }
 
   async onNewIncomingMessage(update: ITelegramUpdate): Promise<void> {
-    const senderId = update.message?.from?.id;
+    const message = update.message;
+    const senderId = message?.from?.id;
+    const botConfig = this.botConfigService.getConfig();
+    const isOwnerMessage = message && botConfig.ownerIds.includes(senderId);
+    const isPrivateChat = message?.chat?.type === 'private';
 
-    if (update.message?.reply_to_message) {
-      this.onReply(update.message).then();
-    } else if (this.botConfig.ownerIds.includes(senderId) && update.message?.chat?.type === 'private') {
-      this.onOwnerPrivateMessage(update.message).then();
+    if (message?.reply_to_message) {
+      await this.onReply(message);
+    }
 
-    } else if (this.botConfig.ownerIds.includes(senderId) && update.message?.text === AdminBotCommand.EshopSubscribe) {
-      this.logger.debug(`Received eshop subscribe command from owner (chatId=${update.message.chat.id})`);
-      await this.updateConfig('eshopChatId', update.message.chat.id);
-      await this.likeMessage(update.message.chat.id, update.message.message_id);
+    const isOwnerPrivateChat = isOwnerMessage && isPrivateChat;
+    if (isOwnerPrivateChat) {
+      this.onOwnerPrivateMessage(message);
+    }
 
-    } else if (this.botConfig.ownerIds.includes(senderId) && update.message?.text === AdminBotCommand.EshopUnsubscribe) {
-      this.logger.debug(`Received eshop unsubscribe command from owner (chatId=${update.message.chat.id})`);
-      await this.updateConfig('eshopChatId', null);
-      await this.likeMessage(update.message.chat.id, update.message.message_id);
+    const isEshopSubscribeCommand = isOwnerMessage && message.text === AdminBotCommand.EshopSubscribe;
+    if (isEshopSubscribeCommand) {
+      await this.onOwnerEshopSubscribe(message);
+    }
 
-    } if (update.message?.chat.id === this.botConfig.eshopChatId && update.message?.text === AdminBotCommand.EshopGetInfo) {
-      this.logger.debug(`Received eshop get info command from eshop chat (chatId=${update.message.chat.id})`);
-      this.execMethod(ApiMethodName.SendChatAction, { chat_id: update.message.chat.id, action: 'typing' });
-      this.events.emit(PendingMessageType.EshopGetInfo);
+    const isEshopUnsubscribeCommand = isOwnerMessage && message.text === AdminBotCommand.EshopUnsubscribe;
+    if (isEshopUnsubscribeCommand) {
+      await this.onOwnerEshopUnsubscribe(message);
+    }
 
-    } else if (update.message?.chat.id === this.botConfig.powerStatusGroupId && update.message?.text === AdminBotCommand.GetPowerStatus) {
-      this.logger.debug(`Received get power status command from power status group (chatId=${update.message.chat.id})`);
-      this.execMethod(ApiMethodName.SendChatAction, { chat_id: update.message.chat.id, action: 'typing' });
-      const replyParameters: ITelegramReplyParameters = { message_id: update.message.message_id };
-      this.events.emit(PendingMessageType.GetPowerStatus, { replyParameters });
+    const isEshopGetInfoCommand = message
+      && message.chat.id === botConfig.eshopChatId
+      && message.text === AdminBotCommand.EshopGetInfo;
+    if (isEshopGetInfoCommand) {
+      this.onEshopGetInfo(message);
+    }
 
-    } else if (this.botConfig.ownerIds.includes(senderId) && update.message?.text === AdminBotCommand.PowerStatusGroup) {
-      this.logger.debug(`Received power status group command from owner (chatId=${update.message.chat.id})`);
-      await this.updateConfig('powerStatusGroupId', update.message.chat.id);
-      await this.likeMessage(update.message.chat.id, update.message.message_id);
+    const isGetPowerStatusCommand = message
+      && message.chat.id === botConfig.powerStatusGroupId
+      && message.text === AdminBotCommand.GetPowerStatus;
+    if (isGetPowerStatusCommand) {
+      this.onGetPowerStatus(message);
+    }
 
-    } else {
-      if (update.message?.text === '/start' && update.message?.chat.type === 'private') {
-        const text = new BotMessageText(`Вітаю! Я бот для сповіщень від "Київ Цифровий" щодо відключень світла на вул. Юлії Здановської, 71-з.`)
-          .newLine()
-          .addLine(`Для отримання сповіщень, можете підписатись на канал: ${BotMessageText.link({ url: 'https://t.me/brama_kyiv_digital' }, 't.me/brama_kyiv_digital')}.`)
-          .newLine()
-          .addLine(`Або якщо Ви бажаєте отримувати сповіщення у власній групі, будь ласка, зверніться до адміністратора бота ${BotMessageText.link({ userId: this.botConfig.ownerIds[0] }, '@vokilam')}`);
+    const isPowerStatusGroupCommand = isOwnerMessage && message.text === AdminBotCommand.PowerStatusGroup;
+    if (isPowerStatusGroupCommand) {
+      await this.onOwnerSetPowerStatusGroup(message);
+    }
 
-        await this.sendMessage(
-          update.message.chat.id,
-          text,
-        );
-      }
+    const isStartCommand = message && isPrivateChat && message.text === '/start';
+    if (isStartCommand) {
+      await this.sendStartMessage(message);
+    }
 
-      // Notify about every incoming message
-      if (update.message?.new_chat_members) {
-        return;
-      }
+    if (!isOwnerMessage) {
+      await this.persistAndForwardIncomingUpdate(update);
+    }
+  }
 
-      const message = update.message || update;
-      try {
-        await this.botIncomingMessageModel.create({ message });
+  private async onOwnerEshopSubscribe(message: ITelegramMessage): Promise<void> {
+    this.logger.debug(`Received eshop subscribe command from owner (chatId=${message.chat.id})`);
+    try {
+      await this.botConfigService.updateConfig('eshopChatId', message.chat.id);
+      await this.likeMessage(message.chat.id, message.message_id);
+    } catch (e) {
+      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      await this.sendMessageToOwner(new BotMessageText(`Failed to update eshop chat ID: ${errorMessage}`));
+    }
+  }
 
-        await this.sendMessageToOwner(new BotMessageText(BotMessageText.code(JSON.stringify(message, null, 2), 'json')));
-      } catch (e) {
-        this.logger.error(`Creating incoming message: Failed:`);
-        this.logger.error(e);
-      }
+  private async onOwnerEshopUnsubscribe(message: ITelegramMessage): Promise<void> {
+    this.logger.debug(`Received eshop unsubscribe command from owner (chatId=${message.chat.id})`);
+    try {
+      await this.botConfigService.updateConfig('eshopChatId', null);
+      await this.likeMessage(message.chat.id, message.message_id);
+    } catch (e) {
+      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      await this.sendMessageToOwner(new BotMessageText(`Failed to update eshop chat ID: ${errorMessage}`));
+    }
+  }
+
+  private onEshopGetInfo(message: ITelegramMessage): void {
+    this.logger.debug(`Received eshop get info command from eshop chat (chatId=${message.chat.id})`);
+    this.telegramApiService.execMethod(
+      ApiMethodName.SendChatAction,
+      { chat_id: message.chat.id, action: 'typing' },
+    ).catch(() => {});
+    this.events.emit(PendingMessageType.EshopGetInfo);
+  }
+
+  private onGetPowerStatus(message: ITelegramMessage): void {
+    this.logger.debug(`Received get power status command from power status group (chatId=${message.chat.id})`);
+    this.telegramApiService.execMethod(
+      ApiMethodName.SendChatAction,
+      { chat_id: message.chat.id, action: 'typing' },
+    ).catch(() => {});
+
+    const replyParameters: ITelegramReplyParameters = {
+      message_id: message.message_id,
+    };
+
+    this.events.emit(PendingMessageType.GetPowerStatus, { replyParameters });
+  }
+
+  private async onOwnerSetPowerStatusGroup(message: ITelegramMessage): Promise<void> {
+    this.logger.debug(`Received power status group command from owner (chatId=${message.chat.id})`);
+    try {
+      await this.botConfigService.updateConfig('powerStatusGroupId', message.chat.id);
+      await this.likeMessage(message.chat.id, message.message_id);
+    } catch (e) {
+      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      await this.sendMessageToOwner(new BotMessageText(`Failed to update power status group ID: ${errorMessage}`));
+    }
+  }
+
+  private async sendStartMessage(message: ITelegramMessage): Promise<void> {
+    const botConfig = this.botConfigService.getConfig();
+    const channelLink = BotMessageText.link(
+      { url: 'https://t.me/brama_kyiv_digital' },
+      't.me/brama_kyiv_digital',
+    );
+    const ownerLink = BotMessageText.link(
+      { userId: botConfig.ownerIds[0] },
+      '@vokilam',
+    );
+    const text = new BotMessageText(`Вітаю! Я неофіційний бот для сповіщень від "Київ Цифровий" щодо відключень світла у ЖК "Сонячна Брама".`)
+      .newLine()
+      .addLine(`Для отримання сповіщень, можете підписатись на канал: ${channelLink}.`)
+      .newLine()
+      .addLine(`Або якщо Ви бажаєте отримувати сповіщення у власній групі, будь ласка, зверніться до адміністратора бота ${ownerLink}`);
+
+    await this.sendMessage(message.chat.id, text);
+  }
+
+  private async persistAndForwardIncomingUpdate(update: ITelegramUpdate): Promise<void> {
+    const persistedMessage = update.message ?? update;
+    try {
+      await this.botIncomingMessageModel.create({ message: persistedMessage });
+
+      await this.sendMessageToOwner(
+        new BotMessageText(BotMessageText.code(JSON.stringify(persistedMessage, null, 2), 'json')),
+      );
+    } catch (e) {
+      this.logger.error(`Creating incoming message: Failed:`);
+      this.logger.error(e);
     }
   }
 
@@ -177,13 +240,23 @@ export class BotService implements OnApplicationBootstrap {
       const [command, ...args] = message.text.split(' ');
       switch (command) {
         case AdminBotCommand.Enable:
-          await this.updateConfig('isEnabled', true);
-          await this.likeMessage(chatId, message.message_id);
+          try {
+            await this.botConfigService.updateConfig('isEnabled', true);
+            await this.likeMessage(chatId, message.message_id);
+          } catch (e) {
+            const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+            await this.sendMessage(chatId, new BotMessageText(`Failed to enable bot: ${errorMessage}`));
+          }
           break;
 
         case AdminBotCommand.Disable:
-          await this.updateConfig('isEnabled', false);
-          await this.likeMessage(chatId, message.message_id);
+          try {
+            await this.botConfigService.updateConfig('isEnabled', false);
+            await this.likeMessage(chatId, message.message_id);
+          } catch (e) {
+            const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+            await this.sendMessage(chatId, new BotMessageText(`Failed to disable bot: ${errorMessage}`));
+          }
           break;
 
         case AdminBotCommand.Status:
@@ -193,8 +266,9 @@ export class BotService implements OnApplicationBootstrap {
         case AdminBotCommand.SetGroupStatus:
           const groupId = parseInt(args[0]);
           const status = args[1];
+          const botConfig = this.botConfigService.getConfig();
 
-          const groupIndex = this.botConfig.groups.findIndex(group => group.id === groupId);
+          const groupIndex = botConfig.groups.findIndex(group => group.id === groupId);
           if (groupIndex === -1) {
             await this.sendMessage(chatId, new BotMessageText(`Group not found (id=${groupId})`));
             return;
@@ -205,11 +279,16 @@ export class BotService implements OnApplicationBootstrap {
             return;
           }
 
-          this.botConfig.groups[groupIndex].isEnabled = status === 'enabled';
+          botConfig.groups[groupIndex].isEnabled = status === 'enabled';
 
-          await this.updateConfig('groups', this.botConfig.groups);
-          await this.likeMessage(chatId, message.message_id);
-          await this.sendMessage(chatId, this.buildStatusText());
+          try {
+            await this.botConfigService.updateConfig('groups', botConfig.groups);
+            await this.likeMessage(chatId, message.message_id);
+            await this.sendMessage(chatId, this.buildStatusText());
+          } catch (e) {
+            const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+            await this.sendMessage(chatId, new BotMessageText(`Failed to update group status: ${errorMessage}`));
+          }
           break;
 
         case AdminBotCommand.GetScheduleToday: {
@@ -281,7 +360,7 @@ export class BotService implements OnApplicationBootstrap {
 
           let totalDeleted = 0;
           for (const [deletedMessageChatId, messageIds] of messageIdsByChatId.entries()) {
-            await this.execMethod(
+            await this.telegramApiService.execMethod(
               ApiMethodName.DeleteMessages,
               { chat_id: deletedMessageChatId, message_ids: messageIds },
             );
@@ -327,8 +406,9 @@ export class BotService implements OnApplicationBootstrap {
   async askForCode(): Promise<void> {
     this.logger.debug(`Asking for code...`);
 
+    const botConfig = this.botConfigService.getConfig();
     const text = new BotMessageText(`Отправьте код в ответ на это сообщение`);
-    const response = await this.sendMessage(this.botConfig.ownerIds[0], text);
+    const response = await this.sendMessage(botConfig.ownerIds[0], text);
     this.logger.debug(response);
     this.pendingMessages.push({
       type: PendingMessageType.AskForCode,
@@ -343,13 +423,14 @@ export class BotService implements OnApplicationBootstrap {
     text: BotMessageText,
   ): Promise<void> {
     this.logger.debug(`Sending message to all enabled groups... (text=${text.toString()})`);
-    if (!this.botConfig.isEnabled) {
+    const botConfig = this.botConfigService.getConfig();
+    if (!botConfig.isEnabled) {
       this.sendMessageToOwner(new BotMessageText(`Tried to send message to all enabled groups, but bot is disabled (text=${text.toString()})`)).then();
       this.logger.warn(`Sending message to all enabled groups: Exiting, bot is disabled`);
       return;
     }
 
-    for (const group of this.botConfig.groups) {
+    for (const group of botConfig.groups) {
       if (!group.isEnabled) {
         this.logger.debug(`Sending message to all enabled groups: Skipping disabled group (id=${group.id}, comment=${group.comment})`);
         continue;
@@ -358,7 +439,7 @@ export class BotService implements OnApplicationBootstrap {
       try {
         await this.sendMessage(group.id, text, { messageThreadId: group.threadId });
       } catch (e) {
-        const message = `Could not send message to group`;
+        const message = `Failed to send message to group`;
         this.logger.error(message);
         this.logger.error(e);
         this.logger.debug({ group });
@@ -375,7 +456,8 @@ export class BotService implements OnApplicationBootstrap {
     text: BotMessageText,
   ): Promise<void> {
     try {
-      const ownerId = this.botConfig.ownerIds[0];
+      const botConfig = this.botConfigService.getConfig();
+      const ownerId = botConfig.ownerIds[0];
 
       if (config.appEnv !== 'production') {
         text
@@ -386,7 +468,8 @@ export class BotService implements OnApplicationBootstrap {
 
       await this.sendMessage(ownerId, text);
     } catch (e) {
-      this.logger.error(`Could not send message to owner: ${e.message}`);
+      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      this.logger.error(`Failed to send message to owner: ${errorMessage}`);
     }
   }
 
@@ -397,22 +480,23 @@ export class BotService implements OnApplicationBootstrap {
       reaction: [{ type: 'emoji', emoji: '👍' }],
     };
 
-    return this.execMethod(ApiMethodName.SetMessageReaction, payload);
+    return this.telegramApiService.execMethod(ApiMethodName.SetMessageReaction, payload);
   }
 
   async sendMessageToEshop(
     text: BotMessageText,
   ): Promise<void> {
     this.logger.debug(`Sending message to eshop... (text=${text.toString()})`);
-    if (!this.botConfig.eshopChatId) {
+    const botConfig = this.botConfigService.getConfig();
+    if (!botConfig.eshopChatId) {
       this.logger.warn(`Sending message to eshop: Exiting, no eshop chat ID configured`);
       return;
     }
 
     try {
-      await this.sendMessage(this.botConfig.eshopChatId, text);
+      await this.sendMessage(botConfig.eshopChatId, text);
     } catch (e) {
-      const message = `Could not send message to eshop`;
+      const message = `Failed to send message to eshop`;
       this.logger.error(message);
       this.logger.error(e);
 
@@ -431,14 +515,15 @@ export class BotService implements OnApplicationBootstrap {
     } = {},
   ): Promise<void> {
     this.logger.debug(`Sending message to power status group... (text=${text.toString()})`);
-    if (!this.botConfig.powerStatusGroupId) {
+    const botConfig = this.botConfigService.getConfig();
+    if (!botConfig.powerStatusGroupId) {
       this.logger.warn(`Sending message to power status group: Exiting, no power status group chat ID configured`);
       return;
     }
 
     try {
       await this.sendMessage(
-        this.botConfig.powerStatusGroupId,
+        botConfig.powerStatusGroupId,
         text,
         {
           replyParameters: options.replyParameters,
@@ -446,7 +531,7 @@ export class BotService implements OnApplicationBootstrap {
         },
       );
     } catch (e) {
-      const message = `Could not send message to power status group`;
+      const message = `Failed to send message to power status group`;
       this.logger.error(message);
       this.logger.error(e);
 
@@ -462,20 +547,21 @@ export class BotService implements OnApplicationBootstrap {
     text: BotMessageText,
   ): Promise<void> {
     this.logger.debug(`Sending photo to eshop... (photoUrl=${photoUrl}, text=${text.toString()})`);
-    if (!this.botConfig.eshopChatId) {
+    const botConfig = this.botConfigService.getConfig();
+    if (!botConfig.eshopChatId) {
       this.logger.warn(`Sending photo to eshop: Exiting, no eshop chat ID configured`);
       return;
     }
 
     try {
-      await this.execMethod(ApiMethodName.SendPhoto, {
-        chat_id: this.botConfig.eshopChatId,
+      await this.telegramApiService.execMethod(ApiMethodName.SendPhoto, {
+        chat_id: botConfig.eshopChatId,
         photo: photoUrl,
         caption: text.toString(),
         parse_mode: this.textParseMode,
       });
     } catch (e) {
-      this.logger.error(`Could not send photo to eshop:`);
+      this.logger.error(`Failed to send photo to eshop:`);
       this.logger.error(e);
     }
 
@@ -517,7 +603,10 @@ export class BotService implements OnApplicationBootstrap {
       payload.text = textStr.slice(0, this.maxMessageTextSize);
       textStr = textStr.slice(this.maxMessageTextSize);
 
-      const sentMessage = await this.execMethod<ITelegramMessage>(ApiMethodName.SendMessage, payload);
+      const sentMessage = await this.telegramApiService.execMethod<ITelegramMessage>(
+        ApiMethodName.SendMessage,
+        payload,
+      );
       sentMessages.push(sentMessage);
     }
 
@@ -536,66 +625,12 @@ export class BotService implements OnApplicationBootstrap {
     };
 
     try {
-      await this.execMethod(ApiMethodName.SetWebhook, payload);
+      await this.telegramApiService.execMethod(ApiMethodName.SetWebhook, payload);
 
       this.logger.log(`Successfully set webhook: ${webhookUrl}`);
     } catch (e) {
-      this.logger.error(`Could not set webhook:`);
+      this.logger.error(`Failed to set webhook:`);
       this.logger.error(e);
-    }
-  }
-
-  private async execMethod<T = any>(methodName: ApiMethodName, data: any): Promise<T> {
-    const url = `${this.apiHost}/bot${this.token}/${methodName}`;
-    let httpsAgent = null;
-
-    this.logger.debug(`Executing method:...`);
-    this.logger.debug({ url, data, hasSocks5Proxy: !!config.socks5Proxy });
-
-    if (config.socks5Proxy) {
-      httpsAgent = new SocksProxyAgent(config.socks5Proxy);
-    }
-
-    try {
-      const response = await firstValueFrom(this.httpService.post<{ ok: boolean; result: T }>(
-        url,
-        data,
-        {
-          httpsAgent: httpsAgent,
-        },
-      ));
-
-      if (response.data?.ok !== true) {
-        throw response.data;
-      }
-
-      this.logger.debug(`Executing method finished`);
-      if (!response.data.result) {
-        this.logger.warn({ 'response.data': response.data });
-      }
-
-      return response.data.result;
-    } catch (error) {
-      delete error.response?.data?.config;
-      const errorNormalized = error.response?.data || error.response || error;
-
-      if (errorNormalized.error_code === this.tooManyRequestsErrorCode) {
-        const retryAfter = errorNormalized.parameters.retry_after * 1000;
-
-        setTimeout(() => this.execMethod(methodName, data), retryAfter);
-      } else {
-        delete errorNormalized.config;
-        const errorObj = {
-          url: error.config?.url,
-          method: error.config?.method,
-          data: data,
-          error: errorNormalized,
-        };
-
-        this.logger.error(`Method "${methodName}" failed:`);
-        this.logger.error(errorObj);
-        throw errorObj;
-      }
     }
   }
 
@@ -614,29 +649,6 @@ export class BotService implements OnApplicationBootstrap {
           return `&lt;${tagWithAttrs}&gt;`;
         }
       });
-  }
-
-  private async ensureAndCacheConfig(): Promise<void> {
-    try {
-      this.logger.debug(`Caching config...`);
-
-      const appEnvKey: keyof BotConfig = 'appEnv';
-      const configDoc = await this.botConfigModel.findOne({ [appEnvKey]: config.appEnv }).exec();
-      this.botConfig = configDoc?.toJSON();
-
-      if (!this.botConfig) {
-        this.logger.debug(`Did not find bot config, creating new...`);
-
-        this.botConfig = new BotConfig();
-        await this.botConfigModel.create(this.botConfig);
-      }
-
-      this.logger.debug(`Caching config: Finished`);
-      this.logger.debug(this.botConfig);
-    } catch (e) {
-      this.logger.error(`Caching config: Failed:`);
-      this.logger.error(e);
-    }
   }
 
   private async persistSentMessages(sentMessages: ITelegramMessage[]): Promise<void> {
@@ -661,43 +673,23 @@ export class BotService implements OnApplicationBootstrap {
 
         this.logger.debug(`Persisted sent message: ${JSON.stringify(sentMessageDocContents)}`);
       } catch (e) {
-        this.logger.error(`Could not persist sent message:`);
+        this.logger.error(`Failed to persist sent message:`);
         this.logger.error(e);
       }
     }
   }
 
-  private async updateConfig<K extends keyof BotConfig>(key: K, value: BotConfig[K]): Promise<void> {
-    this.logger.debug(`Updating config... (${key}=${value})`);
-
-    this.botConfig[key] = value;
-
-    try {
-      const appEnvKey: keyof BotConfig = 'appEnv';
-      await this.botConfigModel.findOneAndUpdate(
-        { [appEnvKey]: config.appEnv },
-        { $set: { [key]: value } },
-      );
-
-      this.logger.debug(`Updating config: Finished`);
-      this.logger.debug(this.botConfig);
-    } catch (e) {
-      this.logger.error(`Updating config: Failed:`);
-      this.logger.error(e);
-      this.sendMessageToOwner(new BotMessageText(`Failed to update config: ${e.message}`)).then();
-    }
-  }
-
   private buildStatusText(): BotMessageText {
-    const text = new BotMessageText(`Status: ${BotMessageText.bold(this.botConfig.isEnabled ? 'enabled' : 'disabled')}`)
+    const botConfig = this.botConfigService.getConfig();
+    const text = new BotMessageText(`Status: ${BotMessageText.bold(botConfig.isEnabled ? 'enabled' : 'disabled')}`)
       .newLine();
 
-    text.addLine(`Owner IDs: ${this.botConfig.ownerIds.map(id => BotMessageText.bold(id)).join(', ')}`)
+    text.addLine(`Owner IDs: ${botConfig.ownerIds.map(id => BotMessageText.bold(id)).join(', ')}`)
       .newLine();
 
     text.addLine(`Groups:`)
-    for (let i = 0; i < this.botConfig.groups.length; i++) {
-      const group = this.botConfig.groups[i];
+    for (let i = 0; i < botConfig.groups.length; i++) {
+      const group = botConfig.groups[i];
       const status = group.isEnabled ? 'enabled' : 'disabled';
       const threadId = group.threadId ? ` (threadId=${group.threadId})` : '';
       text.addLine(` ${i + 1}. ${BotMessageText.bold(group.id)}${threadId} - ${BotMessageText.bold(status)}: "${group.comment}"`);

@@ -6,6 +6,8 @@ import { HttpModule } from '@nestjs/axios';
 import { BotConfig, BotConfigSchema } from './schemas/bot-config.schema';
 import { BotSentMessage, BotSentMessageSchema } from './schemas/bot-sent-message.schema';
 import { BotIncomingMessage, BotIncomingMessageSchema } from './schemas/bot-incoming-message.schema';
+import { TelegramApiService } from './services/telegram-api.service';
+import { BotConfigService } from './services/bot-config.service';
 
 @Module({
   imports: [
@@ -16,7 +18,7 @@ import { BotIncomingMessage, BotIncomingMessageSchema } from './schemas/bot-inco
     ]),
     HttpModule,
   ],
-  providers: [BotService],
+  providers: [BotService, TelegramApiService, BotConfigService],
   controllers: [BotController],
   exports: [BotService],
 })

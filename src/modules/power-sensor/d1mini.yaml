@@ -6,8 +6,9 @@ esphome:
       - logger.log: ">>> BOOT: Waiting for Wi-Fi..."
       - wait_until:
           wifi.connected:
-      - logger.log: ">>> BOOT: Wi-Fi connected! Sending power status"
-      - script.execute: send_power_status
+      - logger.log: ">>> BOOT: Wi-Fi connected! Sending power status after delay for NTP sync"
+      - delay: 1000ms
+      - script.execute: send_power_status_boot
       - logger.log: ">>> BOOT: Waiting delay, and then toggling status LED"
       - delay: 500ms
       - if:
@@ -41,7 +42,7 @@ sensor:
     pin: A0
     name: "Battery Voltage"
     id: battery_voltage
-    update_interval: 30s
+    update_interval: 120s
     filters:
       - multiply: 4.14
     unit_of_measurement: "V"
@@ -91,12 +92,35 @@ script:
           json: |-
             root["hasPower"] = id(power_available).state;
             root["batteryVoltage"] = id(battery_voltage).state;
-            root["timestampIso"] = id(sntp_time).utcnow().strftime("%Y-%m-%dT%H:%M:%SZ");
+            if (id(sntp_time).now().is_valid()) {
+              root["timestampIso"] = id(sntp_time).utcnow().strftime("%Y-%m-%dT%H:%M:%SZ");
+            }
           request_headers:
             Content-Type: application/json
           on_response:
             then:
               - logger.log: "Request sent successfully"
+
+  - id: send_power_status_boot
+    mode: restart
+    then:
+      - logger.log:
+          format: ">>> REQUEST BOOT: Power: %s | Battery: %.2fV"
+          args: ['id(power_available).state ? "ON" : "OFF"', 'id(battery_voltage).state']
+      - http_request.post:
+          url: https://klondike.com.ua/brama-bot/api/v1/power-sensor
+          json: |-
+            root["hasPower"] = id(power_available).state;
+            root["batteryVoltage"] = id(battery_voltage).state;
+            if (id(sntp_time).now().is_valid()) {
+              root["timestampIso"] = id(sntp_time).utcnow().strftime("%Y-%m-%dT%H:%M:%SZ");
+            }
+            root["boot"] = true;
+          request_headers:
+            Content-Type: application/json
+          on_response:
+            then:
+              - logger.log: "Request on boot sent successfully"
 
 wifi:
   ssid: "@Ruijie-sD2F3"
