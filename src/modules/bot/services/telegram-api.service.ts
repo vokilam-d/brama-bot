@@ -75,7 +75,7 @@ export class TelegramApiService {
 
         this.logger.error(`Executing method: Failed: (methodName=${methodName})`);
         this.logger.error(errorObj);
-        throw errorObj;
+        throw errorNormalized;
       }
     }
   }

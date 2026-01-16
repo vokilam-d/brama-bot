@@ -144,7 +144,7 @@ export class BotService implements OnApplicationBootstrap {
       await this.botConfigService.updateConfig('eshopChatId', message.chat.id);
       await this.likeMessage(message.chat.id, message.message_id);
     } catch (e) {
-      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
       await this.sendMessageToOwner(new BotMessageText(`Failed to update eshop chat ID: ${errorMessage}`));
     }
   }
@@ -155,7 +155,7 @@ export class BotService implements OnApplicationBootstrap {
       await this.botConfigService.updateConfig('eshopChatId', null);
       await this.likeMessage(message.chat.id, message.message_id);
     } catch (e) {
-      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
       await this.sendMessageToOwner(new BotMessageText(`Failed to update eshop chat ID: ${errorMessage}`));
     }
   }
@@ -189,7 +189,7 @@ export class BotService implements OnApplicationBootstrap {
       await this.botConfigService.updateConfig('powerStatusGroupId', message.chat.id);
       await this.likeMessage(message.chat.id, message.message_id);
     } catch (e) {
-      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
       await this.sendMessageToOwner(new BotMessageText(`Failed to update power status group ID: ${errorMessage}`));
     }
   }
@@ -217,13 +217,19 @@ export class BotService implements OnApplicationBootstrap {
     const persistedMessage = update.message ?? update;
     try {
       await this.botIncomingMessageModel.create({ message: persistedMessage });
+    } catch (e) {
+      this.logger.error(`Creating incoming message: Failed:`);
+      this.logger.error(e);
+      void this.sendMessageToOwner(new BotMessageText(`Failed to create incoming message: ${e.message}`));
+    }
 
+    try {
       await this.sendMessageToOwner(
         new BotMessageText(BotMessageText.code(JSON.stringify(persistedMessage, null, 2), 'json')),
       );
     } catch (e) {
-      this.logger.error(`Creating incoming message: Failed:`);
-      this.logger.error(e);
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
+      this.logger.error(`Forwarding incoming message: Failed: ${errorMessage}`);
     }
   }
 
@@ -244,7 +250,7 @@ export class BotService implements OnApplicationBootstrap {
             await this.botConfigService.updateConfig('isEnabled', true);
             await this.likeMessage(chatId, message.message_id);
           } catch (e) {
-            const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+            const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
             await this.sendMessage(chatId, new BotMessageText(`Failed to enable bot: ${errorMessage}`));
           }
           break;
@@ -254,7 +260,7 @@ export class BotService implements OnApplicationBootstrap {
             await this.botConfigService.updateConfig('isEnabled', false);
             await this.likeMessage(chatId, message.message_id);
           } catch (e) {
-            const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+            const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
             await this.sendMessage(chatId, new BotMessageText(`Failed to disable bot: ${errorMessage}`));
           }
           break;
@@ -286,7 +292,7 @@ export class BotService implements OnApplicationBootstrap {
             await this.likeMessage(chatId, message.message_id);
             await this.sendMessage(chatId, this.buildStatusText());
           } catch (e) {
-            const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+            const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
             await this.sendMessage(chatId, new BotMessageText(`Failed to update group status: ${errorMessage}`));
           }
           break;
@@ -379,7 +385,7 @@ export class BotService implements OnApplicationBootstrap {
     } catch (e) {
       this.logger.error(`Handling owner message: Failed:`);
       this.logger.error(e);
-      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
       this.sendMessageToOwner(new BotMessageText(`Failed to handle owner message (message=${message.text}): ${errorMessage}`)).then();
     }
   }
@@ -444,7 +450,7 @@ export class BotService implements OnApplicationBootstrap {
         this.logger.error(e);
         this.logger.debug({ group });
 
-        const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+        const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
         this.sendMessageToOwner(new BotMessageText(`${message}: ${errorMessage}`)).then();
       }
     }
@@ -468,7 +474,7 @@ export class BotService implements OnApplicationBootstrap {
 
       await this.sendMessage(ownerId, text);
     } catch (e) {
-      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
       this.logger.error(`Failed to send message to owner: ${errorMessage}`);
     }
   }
@@ -500,7 +506,7 @@ export class BotService implements OnApplicationBootstrap {
       this.logger.error(message);
       this.logger.error(e);
 
-      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
       this.sendMessageToOwner(new BotMessageText(`${message}: ${errorMessage}`)).then();
     }
 
@@ -535,7 +541,7 @@ export class BotService implements OnApplicationBootstrap {
       this.logger.error(message);
       this.logger.error(e);
 
-      const errorMessage = e.error?.description || e.message || e.toString?.() || JSON.stringify(e);
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
       this.sendMessageToOwner(new BotMessageText(`${message}: ${errorMessage}`)).then();
     }
 
@@ -561,8 +567,9 @@ export class BotService implements OnApplicationBootstrap {
         parse_mode: this.textParseMode,
       });
     } catch (e) {
-      this.logger.error(`Failed to send photo to eshop:`);
-      this.logger.error(e);
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
+      this.logger.error(`Failed to send photo to eshop: ${errorMessage}`);
+      void this.sendMessageToOwner(new BotMessageText(`Failed to send photo to eshop: ${errorMessage}`));
     }
 
     this.logger.debug(`Sending photo to eshop: Finished`);
@@ -673,8 +680,8 @@ export class BotService implements OnApplicationBootstrap {
 
         this.logger.debug(`Persisted sent message: ${JSON.stringify(sentMessageDocContents)}`);
       } catch (e) {
-        this.logger.error(`Failed to persist sent message:`);
-        this.logger.error(e);
+        this.logger.error(`Failed to persist sent message: ${e.message}`);
+        void this.sendMessageToOwner(new BotMessageText(`Failed to persist sent message: ${e.message}`));
       }
     }
   }
