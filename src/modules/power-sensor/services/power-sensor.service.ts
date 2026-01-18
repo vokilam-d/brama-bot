@@ -71,6 +71,14 @@ export class PowerSensorService implements OnApplicationBootstrap {
         .add(BotMessageText.bold(title))
         .add(` • ${padTime(timestamp.getHours())}:${padTime(timestamp.getMinutes())}:${padTime(timestamp.getSeconds())}`);
 
+      if (lastStatus.hasPower !== null && lastStatus.timestampIso) {
+        const lastTimestamp = new Date(lastStatus.timestampIso);
+        const durationMs = timestamp.getTime() - lastTimestamp.getTime();
+        const durationText = this.formatDuration(durationMs);
+        const durationLabel = newHasPower ? 'Без світла були' : 'Зі світлом були';
+        messageText.newLine().addLine(`${durationLabel} ${durationText}`);
+      }
+
       await this.botService.sendMessageToPowerStatusGroup(
         messageText,
         {
@@ -88,6 +96,22 @@ export class PowerSensorService implements OnApplicationBootstrap {
       this.logger.error(message);
       this.botService.sendMessageToOwner(new BotMessageText(message)).then();
     }
+  }
+
+  private formatDuration(durationMs: number): string {
+    const totalSeconds = Math.floor(durationMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+    const parts: string[] = [];
+    if (hours > 0) {
+      parts.push(`${hours}г`);
+    }
+    if (minutes > 0) {
+      parts.push(`${minutes}хв`);
+    }
+
+    return parts.length > 0 ? parts.join(' ') : '0хв';
   }
 
   private async sendCurrentPowerStatus(replyParameters?: ITelegramReplyParameters): Promise<void> {
