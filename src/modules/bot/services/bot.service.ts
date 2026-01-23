@@ -214,6 +214,14 @@ export class BotService implements OnApplicationBootstrap {
   }
 
   private async persistAndForwardIncomingUpdate(update: ITelegramUpdate): Promise<void> {
+    const botConfig = this.botConfigService.getConfig();
+    if (
+      update.message?.chat.id === botConfig.powerStatusGroupId
+      || update.message?.chat.id === botConfig.eshopChatId
+    ) {
+      return;
+    }
+
     const persistedMessage = update.message ?? update;
     try {
       await this.botIncomingMessageModel.create({ message: persistedMessage });
