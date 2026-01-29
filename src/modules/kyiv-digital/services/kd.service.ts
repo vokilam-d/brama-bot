@@ -15,8 +15,8 @@ import { IScheduleItem, IScheduleResponse, PowerState } from '../interfaces/sche
 import { wait } from '../../../helpers/wait.function';
 import { pad } from '../../../helpers/pad.function';
 import { IDtekObjectsResponse } from '../interfaces/dtek-response.interface';
-import { getMonthName } from '../../../helpers/get-month-name.helper';
-import { getDayName } from '../../../helpers/get-day-name.helper';
+import { PowerScheduleOrchestratorService } from '../../power-schedule/services/power-schedule-orchestrator.service';
+import { PowerScheduleProviderId } from '../../power-schedule/interfaces/schedule.interface';
 
 // login method 0 - sms, input 4 digits
 // login method 1 - incoming call, input last 3 digits of phone number
@@ -47,21 +47,13 @@ export class KdService implements OnApplicationBootstrap {
     @InjectModel(KdProcessedScheduleInfo.name) private kdProcessedScheduleInfoModel: Model<KdProcessedScheduleInfo>,
     private readonly httpService: HttpService,
     private readonly botService: BotService,
+    private readonly powerScheduleOrchestrator: PowerScheduleOrchestratorService,
   ) {
   }
 
   async onApplicationBootstrap(): Promise<void> {
     this.botService.events.on(PendingMessageType.AskForCode, code => {
       this.logger.debug({ code });
-    });
-    this.botService.events.on(
-      PendingMessageType.GetSchedule,
-      (options: { day: 'today' | 'tomorrow'; chatId: number; }) => {
-        this.sendScheduleToChat(options.day, options.chatId).then();
-      },
-    );
-    this.botService.events.on(PendingMessageType.SendScheduleToAll, (options: { day: 'today' | 'tomorrow'; }) => {
-      this.sendScheduleToChat(options.day, undefined, true).then();
     });
 
     setInterval(() => {
@@ -315,36 +307,6 @@ export class KdService implements OnApplicationBootstrap {
     await this.persistConfig();
   }
 
-  private async sendScheduleToChat(
-    day: 'today' | 'tomorrow',
-    chatId?: number,
-    sendToGroups: boolean = false,
-  ): Promise<void> {
-    const weekSchedule = await this.getWeekSchedule();
-    if (!weekSchedule) {
-      return;
-    }
-
-    const date = new Date();
-    let dayName = 'сьогодні';
-    if (day === 'tomorrow') {
-      date.setDate(date.getDate() + 1);
-      dayName = 'завтра';
-    }
-
-    const scheduleTitleWithDay = BotMessageText.bold(`🗓 Графік на ${dayName}`);
-    const messageText = new BotMessageText(`${scheduleTitleWithDay} (${date.getDate()} ${getMonthName(date)})`)
-      .newLine()
-      .newLine();
-    messageText.merge(this.buildDayScheduleMessage(weekSchedule, date));
-
-    if (chatId) {
-      await this.botService.sendMessage(chatId, messageText);
-    } else if (sendToGroups) {
-      await this.botService.sendMessageToAllEnabledGroups(messageText);
-    }
-  }
-
   private async getWeekSchedule(tryCount: number = 1): Promise<IScheduleItem[]> {
     const url = `${this.apiHost}/v4/dtek/${config.dtekObjectId}`;
     const requestConfig = this.buildRequestConfig('get', url);
@@ -517,16 +479,16 @@ export class KdService implements OnApplicationBootstrap {
         continue;
       }
 
-      const scheduleTitle = processedScheduleInfoDoc?.isSent ? `Новий графік` : `Графік`;
+      this.logger.debug(
+        `Schedule change detected (date=${date.toISOString()}, hours=${JSON.stringify(schedule.hours)})`,
+      );
 
-      this.logger.debug(`Schedule updated (date=${date.toISOString()}, scheduleTitle=${scheduleTitle}, hours=${JSON.stringify(schedule.hours)}, processedHours=${JSON.stringify(processedScheduleInfoDoc?.toJSON().scheduleItemHours)})`);
-
-      const messageText = new BotMessageText()
-        .addLine(BotMessageText.bold(`🗓 ${scheduleTitle} на ${date.getDate()} ${getMonthName(date)}, ${getDayName(date)}`))
-        .newLine();
-      messageText.merge(this.buildDayScheduleMessage(weekSchedule, date));
-
-      await this.botService.sendMessageToAllEnabledGroups(messageText);
+      await this.powerScheduleOrchestrator.onScheduleChange(
+        PowerScheduleProviderId.Kd,
+        date,
+        { date, hours: schedule.hours },
+        new Date(),
+      );
       await persistProcessedScheduleInfo(true);
     }
 
@@ -565,92 +527,6 @@ export class KdService implements OnApplicationBootstrap {
     if (sendToOwner) {
       this.botService.sendMessageToOwner(new BotMessageText(`${description}: ${message}`)).then();
     }
-  }
-
-  private buildDayScheduleMessage(
-    weekSchedule: IScheduleItem[],
-    date: Date,
-  ): BotMessageText {
-    const dayKdFormat = this.buildDayInKdFormat(date);
-    const daySchedule = weekSchedule.find(schedule => schedule.day_of_week === dayKdFormat);
-    const halfHours = Object.keys(daySchedule.hours).sort();
-
-    const powerStatesWithRanges: {
-      powerState: PowerState;
-      ranges: { startHalfHour: string; endHalfHour?: string; }[];
-    }[] = [];
-
-    for (let i = 0; i < halfHours.length; i++) {
-      const halfHour = halfHours[i];
-      const powerState = daySchedule.hours[halfHour];
-      const lastPowerStateWithRanges = powerStatesWithRanges.at(-1);
-      const lastRange = lastPowerStateWithRanges?.ranges.at(-1);
-      const isLastRangeEnded = Boolean(lastRange?.endHalfHour);
-
-      const handleOffPowerState = (powerState: PowerState) => {
-        if (!lastPowerStateWithRanges) {
-          powerStatesWithRanges.push({ powerState: powerState, ranges: [{ startHalfHour: halfHour }] });
-        } else if (lastPowerStateWithRanges.powerState !== powerState) {
-          if (lastRange && !isLastRangeEnded) {
-            lastRange.endHalfHour = halfHour;
-          }
-
-          powerStatesWithRanges.push({ powerState: powerState, ranges: [{ startHalfHour: halfHour }] });
-        } else if (isLastRangeEnded) {
-          lastPowerStateWithRanges.ranges.push({ startHalfHour: halfHour });
-        }
-      };
-
-      if (powerState === PowerState.On) {
-        if (lastRange && !isLastRangeEnded) {
-          lastRange.endHalfHour = halfHour;
-        }
-      } else if (powerState === PowerState.Off || powerState === PowerState.MaybeOff) {
-        handleOffPowerState(powerState);
-      }
-    }
-
-    const messageText = new BotMessageText();
-
-    if (powerStatesWithRanges.length === 0) {
-      messageText.addLine(`Світло буде весь день`);
-      return messageText;
-    }
-
-    const lastRange = powerStatesWithRanges.at(-1).ranges.at(-1);
-    if (!lastRange.endHalfHour) {
-      lastRange.endHalfHour = 'h00_0';
-    }
-
-    const buildReadableHalfHour = (halfHourStr: string): string => {
-      const match = halfHourStr.match(/^h(\d{2})_([01])$/);
-
-      if (!match) {
-        return halfHourStr;
-      }
-
-      const hour = match[1];
-      const halfHourIndex = match[2];
-      const halfHour = halfHourIndex === '1' ? '30' : '00';
-
-      return `${hour}:${halfHour}`;
-    };
-
-    for (const powerStateWithRanges of powerStatesWithRanges) {
-      if (powerStateWithRanges.powerState === PowerState.Off) {
-        messageText.addLine(`Світло буде відсутнє:`);
-      } else if (powerStateWithRanges.powerState === PowerState.MaybeOff) {
-        messageText.addLine(`Можливе відключення:`);
-      }
-
-      for (const range of powerStateWithRanges.ranges) {
-        const start = buildReadableHalfHour(range.startHalfHour);
-        const end = buildReadableHalfHour(range.endHalfHour);
-        messageText.addLine(`з ${start} до ${end}`);
-      }
-    }
-
-    return messageText;
   }
 
   private buildDayInKdFormat(date: Date): number {

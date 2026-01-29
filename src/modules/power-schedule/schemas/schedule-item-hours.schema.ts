@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { IScheduleItemHours, PowerState } from '../../power-schedule/interfaces/schedule.interface';
+import { IScheduleItemHours, PowerState } from '../interfaces/schedule.interface';
 
+@Schema({ _id: false })
 export class ScheduleItemHours implements IScheduleItemHours {
   @Prop({ required: true }) h00_0: PowerState;
   @Prop({ required: true }) h00_1: PowerState;
@@ -52,18 +53,4 @@ export class ScheduleItemHours implements IScheduleItemHours {
   @Prop({ required: true }) h23_1: PowerState;
 }
 
-@Schema()
-export class KdProcessedScheduleInfo {
-  @Prop({ required: true })
-  dateIso: string;
-
-  @Prop({ required: true })
-  scheduleItemHours: ScheduleItemHours;
-
-  @Prop({ required: true })
-  isSent: boolean;
-
-  static collectionName = `kd-processed-schedule-info`;
-}
-
-export const KdProcessedScheduleInfoSchema = SchemaFactory.createForClass(KdProcessedScheduleInfo);
+export const ScheduleItemHoursSchema = SchemaFactory.createForClass(ScheduleItemHours);
