@@ -1,6 +1,6 @@
 import { Logger, Module, OnApplicationBootstrap } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { config } from './config';
+import { CONFIG } from './config';
 import { PowerScheduleModule } from './modules/power-schedule/power-schedule.module';
 import { KdModule } from './modules/kyiv-digital/kd.module';
 import { DtekModule } from './modules/dtek/dtek.module';
@@ -13,7 +13,7 @@ import { PowerSensorModule } from './modules/power-sensor/power-sensor.module';
 
 @Module({
   imports: [
-    MongooseModule.forRoot(config.mongoUri, { retryDelay: 1 }),
+    MongooseModule.forRoot(CONFIG.mongoUri, { retryDelay: 1 }),
     PowerScheduleModule,
     KdModule,
     DtekModule,

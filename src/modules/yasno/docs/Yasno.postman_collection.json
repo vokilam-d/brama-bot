@@ -1,0 +1,584 @@
+{
+  "info": {
+    "_postman_id": "fece74fc-82a0-438e-bd70-2816de949dd7",
+    "name": "Yasno",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "4976044"
+  },
+  "item": [
+    {
+      "name": "Planned outages",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_host}}/api/blackout-service/public/shutdowns/regions/{{region_id_kyiv}}/dsos/{{dsos_id_dtek_kyiv}}/planned-outages",
+          "host": [
+            "{{api_host}}"
+          ],
+          "path": [
+            "api",
+            "blackout-service",
+            "public",
+            "shutdowns",
+            "regions",
+            "{{region_id_kyiv}}",
+            "dsos",
+            "{{dsos_id_dtek_kyiv}}",
+            "planned-outages"
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Planned outages",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{api_host}}/api/blackout-service/public/shutdowns/regions/{{region_id_kyiv}}/dsos/{{dsos_id_dtek_kyiv}}/planned-outages",
+              "host": [
+                "{{api_host}}"
+              ],
+              "path": [
+                "api",
+                "blackout-service",
+                "public",
+                "shutdowns",
+                "regions",
+                "{{region_id_kyiv}}",
+                "dsos",
+                "{{dsos_id_dtek_kyiv}}",
+                "planned-outages"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": null,
+          "header": [
+            {
+              "key": "Etag",
+              "value": "\"d7db6a94\""
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "1196"
+            },
+            {
+              "key": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "max-age=300, public"
+            },
+            {
+              "key": "Expires",
+              "value": "Thu, 29 Jan 2026 10:28:40 GMT"
+            },
+            {
+              "key": "Date",
+              "value": "Thu, 29 Jan 2026 10:23:40 GMT"
+            },
+            {
+              "key": "X-CDN",
+              "value": "Imperva"
+            },
+            {
+              "key": "X-Iinfo",
+              "value": "37-92088-0 0CNN RT(1769682221354 39) q(0 -1 -1 -1) r(0 -1)"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n    \"1.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 90,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 90,\n                    \"end\": 480,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 480,\n                    \"end\": 930,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 930,\n                    \"end\": 1080,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1080,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"2.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 90,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 90,\n                    \"end\": 480,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 480,\n                    \"end\": 960,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 960,\n                    \"end\": 1110,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1110,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"3.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 180,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 180,\n                    \"end\": 540,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 540,\n                    \"end\": 1020,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1020,\n                    \"end\": 1140,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1140,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"4.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 180,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 180,\n                    \"end\": 600,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 600,\n                    \"end\": 1080,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1080,\n                    \"end\": 1200,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1200,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"5.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 60,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 60,\n                    \"end\": 270,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 270,\n                    \"end\": 690,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 690,\n                    \"end\": 1110,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1110,\n                    \"end\": 1260,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1260,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"6.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 60,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 60,\n                    \"end\": 300,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 300,\n                    \"end\": 720,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 720,\n                    \"end\": 1140,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1140,\n                    \"end\": 1320,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1320,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"7.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 150,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 150,\n                    \"end\": 600,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 600,\n                    \"end\": 780,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 780,\n                    \"end\": 1200,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1200,\n                    \"end\": 1410,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1410,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"8.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 240,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 240,\n                    \"end\": 690,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 690,\n                    \"end\": 840,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 840,\n                    \"end\": 1260,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1260,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"9.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 270,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 270,\n                    \"end\": 720,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 720,\n                    \"end\": 870,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 870,\n                    \"end\": 1320,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1320,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"10.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 300,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 300,\n                    \"end\": 780,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 780,\n                    \"end\": 930,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 930,\n                    \"end\": 1380,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1380,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"11.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 360,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 360,\n                    \"end\": 810,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 810,\n                    \"end\": 960,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 960,\n                    \"end\": 1410,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1410,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"12.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 420,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 420,\n                    \"end\": 870,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 870,\n                    \"end\": 1020,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1020,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"13.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 90,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 90,\n                    \"end\": 480,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 480,\n                    \"end\": 900,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 900,\n                    \"end\": 1110,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1110,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"14.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 90,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 90,\n                    \"end\": 510,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 510,\n                    \"end\": 930,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 930,\n                    \"end\": 1140,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1140,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"15.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 180,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 180,\n                    \"end\": 570,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 570,\n                    \"end\": 990,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 990,\n                    \"end\": 1200,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1200,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"16.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 180,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 180,\n                    \"end\": 600,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 600,\n                    \"end\": 1020,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1020,\n                    \"end\": 1230,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1230,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"17.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 60,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 60,\n                    \"end\": 270,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 270,\n                    \"end\": 690,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 690,\n                    \"end\": 1110,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1110,\n                    \"end\": 1320,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1320,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"18.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 60,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 60,\n                    \"end\": 300,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 300,\n                    \"end\": 720,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 720,\n                    \"end\": 1140,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1140,\n                    \"end\": 1350,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1350,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"19.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 150,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 150,\n                    \"end\": 360,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 360,\n                    \"end\": 480,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 480,\n                    \"end\": 570,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 570,\n                    \"end\": 780,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 780,\n                    \"end\": 1200,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1200,\n                    \"end\": 1410,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1410,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"20.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 150,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 150,\n                    \"end\": 600,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 600,\n                    \"end\": 810,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 810,\n                    \"end\": 1230,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1230,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"21.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 270,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 270,\n                    \"end\": 690,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 690,\n                    \"end\": 900,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 900,\n                    \"end\": 1320,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1320,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"22.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 300,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 300,\n                    \"end\": 720,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 720,\n                    \"end\": 930,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 930,\n                    \"end\": 1350,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1350,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"23.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 360,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 360,\n                    \"end\": 780,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 780,\n                    \"end\": 990,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 990,\n                    \"end\": 1410,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1410,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"24.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 480,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 480,\n                    \"end\": 810,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 810,\n                    \"end\": 1020,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1020,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"25.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 90,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 90,\n                    \"end\": 480,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 480,\n                    \"end\": 900,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 900,\n                    \"end\": 1110,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1110,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"26.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 90,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 90,\n                    \"end\": 510,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 510,\n                    \"end\": 930,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 930,\n                    \"end\": 1140,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1140,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"27.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 180,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 180,\n                    \"end\": 570,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 570,\n                    \"end\": 990,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 990,\n                    \"end\": 1200,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1200,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"28.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 180,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 180,\n                    \"end\": 600,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 600,\n                    \"end\": 1020,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1020,\n                    \"end\": 1230,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1230,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"29.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 60,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 60,\n                    \"end\": 270,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 270,\n                    \"end\": 690,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 690,\n                    \"end\": 1110,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1110,\n                    \"end\": 1320,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1320,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"30.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 60,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 60,\n                    \"end\": 300,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 300,\n                    \"end\": 720,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 720,\n                    \"end\": 1140,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1140,\n                    \"end\": 1350,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1350,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"31.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 150,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 150,\n                    \"end\": 570,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 570,\n                    \"end\": 780,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 780,\n                    \"end\": 1200,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1200,\n                    \"end\": 1410,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1410,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"32.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 150,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 150,\n                    \"end\": 600,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 600,\n                    \"end\": 810,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 810,\n                    \"end\": 1230,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1230,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"33.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 270,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 270,\n                    \"end\": 690,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 690,\n                    \"end\": 900,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 900,\n                    \"end\": 1320,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1320,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"34.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 300,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 300,\n                    \"end\": 720,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 720,\n                    \"end\": 930,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 930,\n                    \"end\": 1350,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1350,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"35.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 360,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 360,\n                    \"end\": 780,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 780,\n                    \"end\": 990,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 990,\n                    \"end\": 1410,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1410,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"36.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 390,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 390,\n                    \"end\": 810,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 810,\n                    \"end\": 1020,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1020,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"37.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 210,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 210,\n                    \"end\": 480,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 480,\n                    \"end\": 900,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 900,\n                    \"end\": 1020,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1020,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"38.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 270,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 270,\n                    \"end\": 480,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 480,\n                    \"end\": 930,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 930,\n                    \"end\": 1080,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1080,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"39.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 300,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 300,\n                    \"end\": 510,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 510,\n                    \"end\": 960,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 960,\n                    \"end\": 1110,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1110,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"40.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 390,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 390,\n                    \"end\": 540,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 540,\n                    \"end\": 1020,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1020,\n                    \"end\": 1170,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1170,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"41.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 60,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 60,\n                    \"end\": 510,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 510,\n                    \"end\": 630,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 630,\n                    \"end\": 1080,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1080,\n                    \"end\": 1200,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1200,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"42.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 90,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 90,\n                    \"end\": 540,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 540,\n                    \"end\": 690,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 690,\n                    \"end\": 1110,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1110,\n                    \"end\": 1230,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1230,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"43.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 150,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 150,\n                    \"end\": 630,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 630,\n                    \"end\": 750,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 750,\n                    \"end\": 1170,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1170,\n                    \"end\": 1290,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1290,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"44.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 210,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 210,\n                    \"end\": 690,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 690,\n                    \"end\": 810,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 810,\n                    \"end\": 1200,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1200,\n                    \"end\": 1320,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1320,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"45.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 30,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 30,\n                    \"end\": 240,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 240,\n                    \"end\": 720,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 720,\n                    \"end\": 840,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 840,\n                    \"end\": 1230,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1230,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"46.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 60,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 60,\n                    \"end\": 300,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 300,\n                    \"end\": 750,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 750,\n                    \"end\": 900,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 900,\n                    \"end\": 1290,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1290,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"47.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 120,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 120,\n                    \"end\": 330,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 330,\n                    \"end\": 810,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 810,\n                    \"end\": 930,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 930,\n                    \"end\": 1320,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1320,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"48.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 150,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 150,\n                    \"end\": 390,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 390,\n                    \"end\": 840,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 840,\n                    \"end\": 960,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 960,\n                    \"end\": 1380,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1380,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"49.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 210,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 210,\n                    \"end\": 480,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 480,\n                    \"end\": 900,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 900,\n                    \"end\": 1020,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1020,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"50.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 270,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 270,\n                    \"end\": 480,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 480,\n                    \"end\": 930,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 930,\n                    \"end\": 1080,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1080,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"51.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 300,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 300,\n                    \"end\": 510,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 510,\n                    \"end\": 960,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 960,\n                    \"end\": 1110,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1110,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"52.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 390,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 390,\n                    \"end\": 540,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 540,\n                    \"end\": 1020,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1020,\n                    \"end\": 1170,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1170,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"53.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 60,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 60,\n                    \"end\": 510,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 510,\n                    \"end\": 630,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 630,\n                    \"end\": 1080,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1080,\n                    \"end\": 1200,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1200,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"54.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 90,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 90,\n                    \"end\": 540,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 540,\n                    \"end\": 690,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 690,\n                    \"end\": 1110,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1110,\n                    \"end\": 1230,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1230,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"55.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 150,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 150,\n                    \"end\": 630,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 630,\n                    \"end\": 750,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 750,\n                    \"end\": 1170,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1170,\n                    \"end\": 1290,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1290,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"56.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 210,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 210,\n                    \"end\": 690,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 690,\n                    \"end\": 810,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 810,\n                    \"end\": 1200,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1200,\n                    \"end\": 1320,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 1320,\n                    \"end\": 1440,\n                    \"type\": \"Definite\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"57.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 30,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 30,\n                    \"end\": 240,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 240,\n                    \"end\": 720,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 720,\n                    \"end\": 840,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 840,\n                    \"end\": 1260,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1260,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"58.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 60,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 60,\n                    \"end\": 300,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 300,\n                    \"end\": 750,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 750,\n                    \"end\": 900,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 900,\n                    \"end\": 1290,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1290,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"59.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 120,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 120,\n                    \"end\": 330,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 330,\n                    \"end\": 810,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 810,\n                    \"end\": 930,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 930,\n                    \"end\": 1320,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1320,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    },\n    \"60.1\": {\n        \"today\": {\n            \"slots\": [\n                {\n                    \"start\": 0,\n                    \"end\": 150,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 150,\n                    \"end\": 390,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 390,\n                    \"end\": 840,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 840,\n                    \"end\": 990,\n                    \"type\": \"NotPlanned\"\n                },\n                {\n                    \"start\": 990,\n                    \"end\": 1380,\n                    \"type\": \"Definite\"\n                },\n                {\n                    \"start\": 1380,\n                    \"end\": 1440,\n                    \"type\": \"NotPlanned\"\n                }\n            ],\n            \"date\": \"2026-01-29T00:00:00+02:00\",\n            \"status\": \"ScheduleApplies\"\n        },\n        \"tomorrow\": {\n            \"slots\": [],\n            \"date\": \"2026-01-30T00:00:00+02:00\",\n            \"status\": \"WaitingForSchedule\"\n        },\n        \"updatedOn\": \"2026-01-28T20:48:36+00:00\"\n    }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Get streets",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_host}}/api/blackout-service/public/shutdowns/addresses/v2/streets?regionId={{region_id_kyiv}}&query=здановської&dsoId={{dsos_id_dtek_kyiv}}",
+          "host": [
+            "{{api_host}}"
+          ],
+          "path": [
+            "api",
+            "blackout-service",
+            "public",
+            "shutdowns",
+            "addresses",
+            "v2",
+            "streets"
+          ],
+          "query": [
+            {
+              "key": "regionId",
+              "value": "{{region_id_kyiv}}"
+            },
+            {
+              "key": "query",
+              "value": "здановської"
+            },
+            {
+              "key": "dsoId",
+              "value": "{{dsos_id_dtek_kyiv}}"
+            }
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Get streets",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{api_host}}/api/blackout-service/public/shutdowns/addresses/v2/streets?regionId={{region_id_kyiv}}&query=здановської&dsoId={{dsos_id_dtek_kyiv}}",
+              "host": [
+                "{{api_host}}"
+              ],
+              "path": [
+                "api",
+                "blackout-service",
+                "public",
+                "shutdowns",
+                "addresses",
+                "v2",
+                "streets"
+              ],
+              "query": [
+                {
+                  "key": "regionId",
+                  "value": "{{region_id_kyiv}}"
+                },
+                {
+                  "key": "query",
+                  "value": "здановської"
+                },
+                {
+                  "key": "dsoId",
+                  "value": "{{dsos_id_dtek_kyiv}}"
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": null,
+          "header": [
+            {
+              "key": "Server",
+              "value": "nginx/1.27.1"
+            },
+            {
+              "key": "Date",
+              "value": "Thu, 29 Jan 2026 10:23:53 GMT"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Transfer-Encoding",
+              "value": "chunked"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "private,max-age=120"
+            },
+            {
+              "key": "Strict-Transport-Security",
+              "value": "max-age=2592000"
+            },
+            {
+              "key": "backend-version",
+              "value": "38c5e3ae4983a6b5d15be55b52cba72042efde56-master"
+            },
+            {
+              "key": "Ios-Target-Version",
+              "value": "258713"
+            },
+            {
+              "key": "Ios-Min-Supported-Version",
+              "value": "258713"
+            },
+            {
+              "key": "Android-Target-Version",
+              "value": "307367"
+            },
+            {
+              "key": "Android-Min-Supported-Version",
+              "value": "307367"
+            },
+            {
+              "key": "Request-Id",
+              "value": "00-6a3a3c2b1e8332da77f939b3b27c6789-b3adbdd255466fae-01"
+            },
+            {
+              "key": "X-Correlation-ID",
+              "value": "13e73e49-1c22-4400-8696-467115c010a9"
+            },
+            {
+              "key": "X-CDN",
+              "value": "Imperva"
+            },
+            {
+              "key": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "key": "X-Iinfo",
+              "value": "37-92088-87968 2NYN RT(1769682221354 12160) q(0 0 0 -1) r(0 0)"
+            }
+          ],
+          "cookie": [],
+          "body": "[\n    {\n        \"id\": 1956,\n        \"value\": \"вул. Здановської Юлії\"\n    }\n]"
+        }
+      ]
+    },
+    {
+      "name": "Get houses",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_host}}/api/blackout-service/public/shutdowns/addresses/v2/houses?regionId={{region_id_kyiv}}&streetId={{street_id_zdanov}}&query=71з&dsoId={{dsos_id_dtek_kyiv}}",
+          "host": [
+            "{{api_host}}"
+          ],
+          "path": [
+            "api",
+            "blackout-service",
+            "public",
+            "shutdowns",
+            "addresses",
+            "v2",
+            "houses"
+          ],
+          "query": [
+            {
+              "key": "regionId",
+              "value": "{{region_id_kyiv}}"
+            },
+            {
+              "key": "streetId",
+              "value": "{{street_id_zdanov}}"
+            },
+            {
+              "key": "query",
+              "value": "71з"
+            },
+            {
+              "key": "dsoId",
+              "value": "{{dsos_id_dtek_kyiv}}"
+            }
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Get houses",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{api_host}}/api/blackout-service/public/shutdowns/addresses/v2/houses?regionId={{region_id_kyiv}}&streetId={{street_id_zdanov}}&query=71з&dsoId={{dsos_id_dtek_kyiv}}",
+              "host": [
+                "{{api_host}}"
+              ],
+              "path": [
+                "api",
+                "blackout-service",
+                "public",
+                "shutdowns",
+                "addresses",
+                "v2",
+                "houses"
+              ],
+              "query": [
+                {
+                  "key": "regionId",
+                  "value": "{{region_id_kyiv}}"
+                },
+                {
+                  "key": "streetId",
+                  "value": "{{street_id_zdanov}}"
+                },
+                {
+                  "key": "query",
+                  "value": "71з"
+                },
+                {
+                  "key": "dsoId",
+                  "value": "{{dsos_id_dtek_kyiv}}"
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": null,
+          "header": [
+            {
+              "key": "Server",
+              "value": "nginx/1.27.1"
+            },
+            {
+              "key": "Date",
+              "value": "Thu, 29 Jan 2026 10:24:17 GMT"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Transfer-Encoding",
+              "value": "chunked"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "private,max-age=120"
+            },
+            {
+              "key": "Strict-Transport-Security",
+              "value": "max-age=2592000"
+            },
+            {
+              "key": "backend-version",
+              "value": "38c5e3ae4983a6b5d15be55b52cba72042efde56-master"
+            },
+            {
+              "key": "Ios-Target-Version",
+              "value": "258713"
+            },
+            {
+              "key": "Ios-Min-Supported-Version",
+              "value": "258713"
+            },
+            {
+              "key": "Android-Target-Version",
+              "value": "307367"
+            },
+            {
+              "key": "Android-Min-Supported-Version",
+              "value": "307367"
+            },
+            {
+              "key": "Request-Id",
+              "value": "00-a45a916b7012b9cf073627068d7e6230-a20e0f82888f3811-01"
+            },
+            {
+              "key": "X-Correlation-ID",
+              "value": "bd43ccd3-59b8-4c92-b04e-a07148c8db7a"
+            },
+            {
+              "key": "X-CDN",
+              "value": "Imperva"
+            },
+            {
+              "key": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "key": "X-Iinfo",
+              "value": "37-92088-87649 2NYN RT(1769682221354 35806) q(0 0 0 -1) r(1 1) U18"
+            }
+          ],
+          "cookie": [],
+          "body": "[\n    {\n        \"id\": 10939,\n        \"value\": \"71З\"\n    }\n]"
+        }
+      ]
+    },
+    {
+      "name": "Get group",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{api_host}}/api/blackout-service/public/shutdowns/addresses/v2/group?regionId={{region_id_kyiv}}&streetId={{street_id_zdanov}}&houseId={{house_id_71_z}}&dsoId={{dsos_id_dtek_kyiv}}",
+          "host": [
+            "{{api_host}}"
+          ],
+          "path": [
+            "api",
+            "blackout-service",
+            "public",
+            "shutdowns",
+            "addresses",
+            "v2",
+            "group"
+          ],
+          "query": [
+            {
+              "key": "regionId",
+              "value": "{{region_id_kyiv}}"
+            },
+            {
+              "key": "streetId",
+              "value": "{{street_id_zdanov}}"
+            },
+            {
+              "key": "houseId",
+              "value": "{{house_id_71_z}}"
+            },
+            {
+              "key": "dsoId",
+              "value": "{{dsos_id_dtek_kyiv}}"
+            }
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Get group",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{api_host}}/api/blackout-service/public/shutdowns/addresses/v2/group?regionId={{region_id_kyiv}}&streetId={{street_id_zdanov}}&houseId={{house_id_71_z}}&dsoId={{dsos_id_dtek_kyiv}}",
+              "host": [
+                "{{api_host}}"
+              ],
+              "path": [
+                "api",
+                "blackout-service",
+                "public",
+                "shutdowns",
+                "addresses",
+                "v2",
+                "group"
+              ],
+              "query": [
+                {
+                  "key": "regionId",
+                  "value": "{{region_id_kyiv}}"
+                },
+                {
+                  "key": "streetId",
+                  "value": "{{street_id_zdanov}}"
+                },
+                {
+                  "key": "houseId",
+                  "value": "{{house_id_71_z}}"
+                },
+                {
+                  "key": "dsoId",
+                  "value": "{{dsos_id_dtek_kyiv}}"
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": null,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "39"
+            },
+            {
+              "key": "Content-Encoding",
+              "value": "gzip"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "max-age=300, public"
+            },
+            {
+              "key": "Expires",
+              "value": "Thu, 29 Jan 2026 10:29:21 GMT"
+            },
+            {
+              "key": "Date",
+              "value": "Thu, 29 Jan 2026 10:24:21 GMT"
+            },
+            {
+              "key": "X-CDN",
+              "value": "Imperva"
+            },
+            {
+              "key": "X-Iinfo",
+              "value": "37-92088-0 0CNN RT(1769682221354 40635) q(0 -1 -1 -1) r(0 -1)"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n    \"group\": 36,\n    \"subgroup\": 1\n}"
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "api_host",
+      "value": "https://app.yasno.ua"
+    },
+    {
+      "key": "region_id_kyiv",
+      "value": "25"
+    },
+    {
+      "key": "dsos_id_dtek_kyiv",
+      "value": "902"
+    },
+    {
+      "key": "street_id_zdanov",
+      "value": "1956"
+    },
+    {
+      "key": "house_id_71_z",
+      "value": "10939"
+    },
+    {
+      "key": "group_id_71_z",
+      "value": "36"
+    },
+    {
+      "key": "subgroup_id_71_z",
+      "value": "1"
+    }
+  ]
+}

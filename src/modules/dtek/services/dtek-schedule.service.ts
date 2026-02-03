@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import puppeteer, { LaunchOptions } from 'puppeteer';
-import { config } from '../../../config';
+import { CONFIG } from '../../../config';
 import {
   INormalizedSchedule,
   IScheduleItemHours,
@@ -46,7 +46,7 @@ type DtekFactData = Record<
 interface DtekFactPayload {
   today?: number;
   update?: string;
-  data?: DtekFactData | Record<string, unknown>;
+  data?: DtekFactData;
 }
 
 interface DtekBuildingInfo {
@@ -70,24 +70,17 @@ interface DtekGetHomeNumResponse {
   updateTimestamp?: string;
 }
 
-interface NormalizedScheduleWithMeta {
-  schedule: INormalizedSchedule;
-  updatedAt?: Date;
-}
-
 interface DtekFetchResult {
   response: DtekGetHomeNumResponse;
   fact?: DtekFactPayload;
 }
 
 @Injectable()
-export class DtekScheduleService
-  implements IPowerScheduleProvider, OnApplicationBootstrap, OnModuleDestroy
-{
+export class DtekScheduleService implements IPowerScheduleProvider, OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(DtekScheduleService.name);
-  private readonly pollIntervalMs = config.dtekPollIntervalMs;
-  private readonly street = config.dtekStreet;
-  private readonly building = config.dtekBuilding;
+  private readonly pollIntervalMs = CONFIG.dtek.pollIntervalMs;
+  private readonly street = CONFIG.dtek.street;
+  private readonly building = CONFIG.dtek.building;
 
   private pollTimer?: NodeJS.Timeout;
   private readonly lastScheduleHashes = new Map<string, string>();
@@ -107,9 +100,7 @@ export class DtekScheduleService
       return;
     }
 
-    this.pollAndNotify()
-      .catch((error) => this.onError(error, 'DTEK poll failed'))
-      .finally(() => this.scheduleNextPoll());
+    this.schedulePollAndNotify();
   }
 
   onModuleDestroy(): void {
@@ -123,37 +114,30 @@ export class DtekScheduleService
       const schedules = await this.fetchSchedules();
       const targetIso = this.normalizeDate(date).toISOString();
 
-      const match = schedules.find(({ schedule }) => {
+      const match = schedules.find((schedule) => {
         return this.normalizeDate(schedule.date).toISOString() === targetIso;
       });
 
-      return match?.schedule ?? null;
+      return match ?? null;
     } catch (error) {
       this.onError(error as Error, 'DTEK: getScheduleForDate failed');
       return null;
     }
   }
 
-  private scheduleNextPoll(): void {
-    this.pollTimer = setTimeout(() => {
-      this.pollAndNotify()
-        .catch((error) => this.onError(error, 'DTEK poll failed'))
-        .finally(() => {
-          this.scheduleNextPoll();
-        });
-    }, this.pollIntervalMs);
+  private async schedulePollAndNotify(): Promise<void> {
+    await this.pollAndNotify();
+    this.pollTimer = setTimeout(() => this.schedulePollAndNotify(), this.pollIntervalMs);
   }
 
   private async pollAndNotify(): Promise<void> {
     try {
       const schedules = await this.fetchSchedules();
-      for (const { schedule, updatedAt } of schedules) {
+      for (const schedule of schedules) {
         if (isAllPowerOn(schedule.hours)) {
           const dateIso = this.normalizeDate(schedule.date).toISOString();
           this.lastScheduleHashes.delete(dateIso);
-          this.logger.debug(
-            `Skipping ${dateIso}: schedule not published yet (all slots On)`,
-          );
+          this.logger.debug(`Skipping ${dateIso}: schedule not published yet (all slots On)`);
           continue;
         }
 
@@ -164,14 +148,13 @@ export class DtekScheduleService
         }
 
         try {
+          this.logger.debug(`Sending DTEK schedule for ${dateIso}`);
           await this.powerScheduleOrchestrator.onScheduleChange(
             PowerScheduleProviderId.Dtek,
             schedule.date,
             schedule,
-            updatedAt,
           );
           this.lastScheduleHashes.set(dateIso, hash);
-          this.logger.log(`Sent DTEK schedule for ${dateIso}`);
         } catch (error) {
           this.onError(
             error as Error,
@@ -187,12 +170,10 @@ export class DtekScheduleService
   private onError(error: Error, description: string): void {
     const message = error.stack ?? error.message ?? String(error);
     this.logger.error(`${description}: ${message}`);
-    this.botService
-      .sendMessageToOwner(new BotMessageText(`${description}: ${error.message}`))
-      .then();
+    void this.botService.sendMessageToOwner(new BotMessageText(`${description}: ${message}`));
   }
 
-  private async fetchSchedules(): Promise<NormalizedScheduleWithMeta[]> {
+  private async fetchSchedules(): Promise<INormalizedSchedule[]> {
     const payload = await this.fetchDtekPagePayload();
     if (!payload) {
       return [];
@@ -211,21 +192,15 @@ export class DtekScheduleService
       return [];
     }
 
-    const factData = this.normalizeFactData(fact?.data);
-    if (!factData) {
+    if (!fact?.data) {
       this.logger.warn(`DTEK fact data is empty`);
       return [];
     }
 
-    const updatedAt =
-      this.parseDtekUpdateDate(fact?.update) ??
-      this.parseDtekUpdateDate(response.updateTimestamp);
+    const schedules: INormalizedSchedule[] = [];
 
-    const dateKeys = this.getRelevantDateKeys(fact, factData);
-    const schedules: NormalizedScheduleWithMeta[] = [];
-
-    dateKeys.forEach((dateKey) => {
-      const slots = factData[dateKey]?.[groupKey];
+    Object.keys(fact.data).forEach((dateKey) => {
+      const slots = fact.data[dateKey]?.[groupKey];
       if (!slots) {
         return;
       }
@@ -236,7 +211,7 @@ export class DtekScheduleService
       }
 
       const date = this.dateFromTimestamp(dateKey);
-      schedules.push({ schedule: { date, hours }, updatedAt });
+      schedules.push({ date, hours });
     });
 
     return schedules;
@@ -244,7 +219,7 @@ export class DtekScheduleService
 
   private async fetchDtekPagePayload(): Promise<DtekFetchResult | null> {
     const launchOptions: LaunchOptions = {
-      headless: this.resolveHeadlessOption(config.dtekPuppeteerHeadless),
+      headless: true,
     };
 
     const browser = await puppeteer.launch(launchOptions);
@@ -267,7 +242,7 @@ export class DtekScheduleService
             // DisconSchedule is a top-level `let`, not on window; use indirect eval to read from global scope
             const ds: DisconSchedule = (0, eval)('typeof DisconSchedule !== "undefined" ? DisconSchedule : null');
             if (!ds?.ajax?.url) {
-              reject(new Error(`DisconSchedule.ajax not available. ${JSON.stringify(ds)}`));
+              reject(new Error(`DisconSchedule.ajax not available. (ds=${JSON.stringify(ds)})`));
               return;
             }
 
@@ -300,65 +275,13 @@ export class DtekScheduleService
     }
   }
 
-  private normalizeFactData(
-    factData?: DtekFactData | Record<string, unknown>,
-  ): DtekFactData | null {
-    if (!factData) {
-      return null;
-    }
-
-    return factData as DtekFactData;
-  }
-
-  private getRelevantDateKeys(
-    fact: DtekFactPayload | undefined,
-    factData: DtekFactData,
-  ): string[] {
-    const keys = new Set<string>();
-
-    if (fact?.today) {
-      keys.add(String(fact.today));
-      keys.add(String(fact.today + 24 * 60 * 60));
-    }
-
-    if (!keys.size) {
-      Object.keys(factData).forEach((key) => keys.add(key));
-    }
-
-    return [...keys];
-  }
-
   private dateFromTimestamp(timestamp: string): Date {
     const numeric = Number(timestamp);
     if (Number.isNaN(numeric)) {
       return new Date();
     }
 
-    return new Date(numeric * 1000);
-  }
-
-  private parseDtekUpdateDate(source?: string): Date | undefined {
-    if (!source) {
-      return undefined;
-    }
-
-    const match =
-      source.match(
-        /(?<hours>\d{2}):(?<minutes>\d{2})\s+(?<day>\d{2})\.(?<month>\d{2})\.(?<year>\d{4})/,
-      ) ?? undefined;
-    if (!match?.groups) {
-      return undefined;
-    }
-
-    const { hours, minutes, day, month, year } = match.groups;
-
-    return new Date(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      Number(hours),
-      Number(minutes),
-    );
+    return this.normalizeDate(new Date(numeric * 1000));
   }
 
   private hashSchedule(hours: IScheduleItemHours): string {
@@ -367,25 +290,7 @@ export class DtekScheduleService
 
   private normalizeDate(date: Date): Date {
     const normalized = new Date(date);
-    normalized.setHours(0, 0, 0, 0);
+    normalized.setHours(12, 0, 0, 0); // 12 hours to avoid timezone/DST issues
     return normalized;
-  }
-
-  private resolveHeadlessOption(
-    headlessValue: string | boolean | undefined,
-  ): LaunchOptions['headless'] {
-    if (typeof headlessValue === 'boolean') {
-      return headlessValue;
-    }
-
-    if (headlessValue === 'true') {
-      return true;
-    }
-
-    if (headlessValue === 'false') {
-      return false;
-    }
-
-    return true;
   }
 }

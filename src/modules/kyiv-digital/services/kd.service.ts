@@ -5,7 +5,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { BotService, PendingMessageType } from '../../bot/services/bot.service';
-import { config } from '../../../config';
+import { CONFIG } from '../../../config';
 import { IFeedItem, IFeedResponse } from '../interfaces/feed-response.interface';
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
 import { AxiosError, AxiosResponse } from 'axios';
@@ -38,7 +38,7 @@ export class KdService implements OnApplicationBootstrap {
   private cachedProcessedFeedItemIds: string[] = [];
   private isDtekObjectAvailable: boolean = true;
 
-  private readonly phoneNumber = config.phoneNumber;
+  private readonly phoneNumber = CONFIG.kyivDigital.phoneNumber;
   private readonly apiHost = `https://kyiv.digital/api`; // https://stage.kyiv.digital/api
 
   constructor(
@@ -65,7 +65,7 @@ export class KdService implements OnApplicationBootstrap {
       }
       this.feedRequestsCounter.count = 0;
       this.feedRequestsCounter.limitsLeft.clear();
-    }, config.kdFeedRequestIntervalMs * 360);
+    }, CONFIG.kyivDigital.feedRequestIntervalMs * 360);
 
     try {
       await this.ensureAndCacheConfig();
@@ -75,7 +75,7 @@ export class KdService implements OnApplicationBootstrap {
       this.onError(e, `Failed to init`);
     }
 
-    this.logger.debug(`Dtek object id=${config.dtekObjectId}, checking it`);
+    this.logger.debug(`Dtek object id=${CONFIG.kyivDigital.dtekObjectId}, checking it`);
     this.checkDtekObject().then();
 
     this.logger.debug(`Requesting feed`);
@@ -159,7 +159,7 @@ export class KdService implements OnApplicationBootstrap {
     }
 
     if (!this.isDtekObjectAvailable) {
-      setTimeout(() => this.handleFeed(), config.kdDtekObjectsRequestIntervalMs);
+      setTimeout(() => this.handleFeed(), CONFIG.kyivDigital.dtekObjectsRequestIntervalMs);
       return;
     }
 
@@ -178,7 +178,7 @@ export class KdService implements OnApplicationBootstrap {
 
       const noAuthStatuses = [401, 403];
       if (!noAuthStatuses.includes((e as AxiosError).response?.status)) {
-        const nextRequestDelay = config.kdFeedRequestIntervalMs * 10;
+        const nextRequestDelay = CONFIG.kyivDigital.feedRequestIntervalMs * 10;
         this.logger.warn(`Re-fetching feed in "${nextRequestDelay / 1000} sec"...`);
         setTimeout(() => this.handleFeed(tryCount + 1), nextRequestDelay);
       }
@@ -191,7 +191,7 @@ export class KdService implements OnApplicationBootstrap {
     try {
       await this.processFeed(data);
 
-      let nextRequestDelay = config.kdFeedRequestIntervalMs;
+      let nextRequestDelay = CONFIG.kyivDigital.feedRequestIntervalMs;
       const rateLimitLeft = Number(headers['x-ratelimit-remaining']);
       this.feedRequestsCounter.limitsLeft.add(rateLimitLeft);
 
@@ -308,7 +308,7 @@ export class KdService implements OnApplicationBootstrap {
   }
 
   private async getWeekSchedule(tryCount: number = 1): Promise<IScheduleItem[]> {
-    const url = `${this.apiHost}/v4/dtek/${config.dtekObjectId}`;
+    const url = `${this.apiHost}/v4/dtek/${CONFIG.kyivDigital.dtekObjectId}`;
     const requestConfig = this.buildRequestConfig('get', url);
 
     let response: AxiosResponse<IScheduleResponse>;
@@ -319,7 +319,7 @@ export class KdService implements OnApplicationBootstrap {
 
       const noAuthStatuses = [401, 403];
       if (tryCount <= 3 && !noAuthStatuses.includes((e as AxiosError).response?.status)) {
-        const nextRequestDelay = config.kdFeedRequestIntervalMs * 10;
+        const nextRequestDelay = CONFIG.kyivDigital.feedRequestIntervalMs * 10;
         this.logger.warn(`Re-fetching schedule in "${nextRequestDelay / 1000} sec"...`);
         await wait(nextRequestDelay);
         return this.getWeekSchedule(tryCount + 1);
@@ -337,15 +337,15 @@ export class KdService implements OnApplicationBootstrap {
 
     try {
       const response = await firstValueFrom(this.httpService.request<IDtekObjectsResponse>(requestConfig));
-      const dtekObject = response.data.objects.find(object => object.id === config.dtekObjectId);
+      const dtekObject = response.data.objects.find(object => object.id === CONFIG.kyivDigital.dtekObjectId);
       if (!dtekObject && this.isDtekObjectAvailable) {
         this.isDtekObjectAvailable = false;
-        this.logger.error(`Dtek object not found (id=${config.dtekObjectId})`);
+        this.logger.error(`Dtek object not found (id=${CONFIG.kyivDigital.dtekObjectId})`);
         this.logger.debug(response.data);
-        this.botService.sendMessageToOwner(new BotMessageText(`Dtek object not found (id=${config.dtekObjectId})`)).then();
+        this.botService.sendMessageToOwner(new BotMessageText(`Dtek object not found (id=${CONFIG.kyivDigital.dtekObjectId})`)).then();
       } else if (dtekObject && !this.isDtekObjectAvailable) {
         this.isDtekObjectAvailable = true;
-        this.logger.log(`Dtek object found (id=${config.dtekObjectId})`);
+        this.logger.log(`Dtek object found (id=${CONFIG.kyivDigital.dtekObjectId})`);
       }
 
       tryCount = 1;
@@ -355,7 +355,7 @@ export class KdService implements OnApplicationBootstrap {
       tryCount++;
     }
 
-    setTimeout(() => this.checkDtekObject(tryCount), config.kdDtekObjectsRequestIntervalMs);
+    setTimeout(() => this.checkDtekObject(tryCount), CONFIG.kyivDigital.dtekObjectsRequestIntervalMs);
   }
 
   private buildRequestConfig(method: 'get', url: string) {
@@ -431,7 +431,7 @@ export class KdService implements OnApplicationBootstrap {
 
     const weekSchedule = await this.getWeekSchedule();
     if (!weekSchedule) {
-      setTimeout(() => this.handleScheduleChanges(), config.kdFeedRequestIntervalMs * 10);
+      setTimeout(() => this.handleScheduleChanges(), CONFIG.kyivDigital.feedRequestIntervalMs * 10);
       return;
     }
 
@@ -488,12 +488,11 @@ export class KdService implements OnApplicationBootstrap {
         PowerScheduleProviderId.Kd,
         date,
         { date, hours: schedule.hours },
-        new Date(),
       );
       await persistProcessedScheduleInfo(true);
     }
 
-    setTimeout(() => this.handleScheduleChanges(), config.kdFeedRequestIntervalMs);
+    setTimeout(() => this.handleScheduleChanges(), CONFIG.kyivDigital.feedRequestIntervalMs);
   }
 
   private async logLastTwoProcessedScheduleInfos(): Promise<void> {

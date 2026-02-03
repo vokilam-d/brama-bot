@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { config } from '../../../config';
+import { CONFIG } from '../../../config';
 import { BotMessageText } from '../helpers/bot-message-text.helper';
 import { ITelegramReplyParameters } from '../interfaces/telegram-reply-parameters.interface';
 import { ITelegramInlineKeyboardMarkup } from '../interfaces/inline-keyboard-markup.interface';
@@ -473,11 +473,11 @@ export class BotService implements OnApplicationBootstrap {
       const botConfig = this.botConfigService.getConfig();
       const ownerId = botConfig.ownerIds[0];
 
-      if (config.appEnv !== 'production') {
+      if (CONFIG.appEnv !== 'production') {
         text
           .newLine()
           .newLine()
-          .addLine(BotMessageText.quote(`env=${config.appEnv}`));
+          .addLine(BotMessageText.quote(`env=${CONFIG.appEnv}`));
       }
 
       await this.sendMessage(ownerId, text);

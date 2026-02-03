@@ -7,7 +7,6 @@ import {
   INormalizedSchedule,
   IScheduleItemHours,
   PowerScheduleProviderId,
-  PowerState,
 } from '../interfaces/schedule.interface';
 import { ProcessedScheduleInfo } from '../schemas/processed-schedule-info.schema';
 import { buildDayScheduleMessage, buildScheduleTitleLine } from '../helpers/schedule-message.helper';
@@ -39,12 +38,12 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
   }
 
   /**
-   * Normalize date to 6 AM to match KD/store convention and avoid DST edge cases.
+   * Normalize date to 12 PM to avoid timezone/DST issues
    */
-  private normalizeScheduleDate(date: Date): Date {
-    const d = new Date(date);
-    d.setHours(6, 0, 0, 0);
-    return d;
+  normalizeDate(date: Date): Date {
+    const normalized = new Date(date);
+    normalized.setHours(12, 0, 0, 0);
+    return normalized;
   }
 
   /**
@@ -55,35 +54,27 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     providerId: PowerScheduleProviderId,
     date: Date,
     normalizedSchedule: INormalizedSchedule,
-    updatedAt?: Date,
   ): Promise<void> {
-    const normalizedDate = this.normalizeScheduleDate(date);
+    const normalizedDate = this.normalizeDate(date);
     const dateIso = normalizedDate.toISOString();
-    const effectiveUpdatedAt = updatedAt ?? new Date();
 
-    const lastProcessed = await this.processedScheduleInfoModel
+    const lastProcessedDoc = await this.processedScheduleInfoModel
       .findOne({ dateIso })
       .sort({ updatedAt: -1 })
       .exec();
+    const lastProcessed = lastProcessedDoc?.toJSON();
 
-    if (lastProcessed && new Date(lastProcessed.updatedAt) >= effectiveUpdatedAt) {
-      this.logger.debug(
-        `Schedule change ignored (older than last sent): dateIso=${dateIso}, providerId=${providerId}`,
-      );
-      return;
-    }
-
-    const isScheduleNotSetup = Object.values(normalizedSchedule.hours).some(
-      (state) => state === PowerState.MaybeOff,
-    );
-    const hasAnyOff = Object.values(normalizedSchedule.hours).some(
-      (state) => state === PowerState.Off || state === PowerState.MaybeOff,
-    );
-    const isFullyOn = !hasAnyOff;
-    if (isScheduleNotSetup && !isFullyOn) {
-      this.logger.debug(`Schedule not setup (dateIso=${dateIso}), persisting without send`);
-      await this.persistProcessed(providerId, dateIso, effectiveUpdatedAt, normalizedSchedule.hours, false);
-      return;
+    if (lastProcessed) {
+      const isScheduleChanged = Object.entries(lastProcessed.scheduleItemHours).some(([halfHour, processedPowerState]) => {
+        const currentPowerState = normalizedSchedule.hours[halfHour];
+        return currentPowerState !== processedPowerState;
+      });
+      if (!isScheduleChanged) {
+        this.logger.debug(
+          `Schedule change ignored (not changed): dateIso=${dateIso}, providerId=${providerId}`,
+        );
+        return;
+      }
     }
 
     const isNew = lastProcessed?.isSent;
@@ -92,15 +83,13 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       .newLine();
     messageText.merge(buildDayScheduleMessage(normalizedSchedule.hours));
 
-    await this.botService.sendMessageToAllEnabledGroups(messageText);
-    void this.botService.sendMessageToOwner(
-      new BotMessageText(`Джерело графіка: ${providerId}`),
-    );
-    await this.persistProcessed(providerId, dateIso, effectiveUpdatedAt, normalizedSchedule.hours, true);
+    messageText.newLine().addLine(`Джерело графіка: ${providerId}`);
 
-    this.logger.debug(
-      `Schedule sent: dateIso=${dateIso}, providerId=${providerId}, updatedAt=${effectiveUpdatedAt.toISOString()}`,
-    );
+    await this.botService.sendMessageToAllEnabledGroups(messageText);
+    // void this.botService.sendMessageToOwner(new BotMessageText(`Джерело графіка: ${providerId}`));
+    await this.persistProcessed(providerId, dateIso, new Date(), normalizedSchedule.hours, true);
+
+    this.logger.debug(`Schedule sent: dateIso=${dateIso}, providerId=${providerId}`);
   }
 
   private async persistProcessed(
@@ -110,15 +99,18 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     scheduleItemHours: IScheduleItemHours,
     isSent: boolean,
   ): Promise<void> {
+    const dateInfoKey: keyof ProcessedScheduleInfo = 'dateIso';
+    const scheduleInfo: ProcessedScheduleInfo = {
+      dateIso,
+      providerId,
+      updatedAt,
+      scheduleItemHours,
+      isSent,
+    };
+
     await this.processedScheduleInfoModel.findOneAndUpdate(
-      { dateIso },
-      {
-        dateIso,
-        providerId,
-        updatedAt,
-        scheduleItemHours,
-        isSent,
-      },
+      { [dateInfoKey]: dateIso },
+      scheduleInfo,
       { upsert: true },
     );
   }
@@ -128,7 +120,7 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     chatId?: number,
     sendToGroups = false,
   ): Promise<void> {
-    const date = this.normalizeScheduleDate(new Date());
+    const date = this.normalizeDate(new Date());
     let dayName = 'сьогодні';
     if (day === 'tomorrow') {
       date.setDate(date.getDate() + 1);
@@ -167,9 +159,7 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       await this.botService.sendMessageToAllEnabledGroups(messageText);
     }
     if (providerId) {
-      void this.botService.sendMessageToOwner(
-        new BotMessageText(`Джерело графіка: ${providerId}`),
-      );
+      void this.botService.sendMessageToOwner(new BotMessageText(`Джерело графіка: ${providerId}`));
     }
   }
 }

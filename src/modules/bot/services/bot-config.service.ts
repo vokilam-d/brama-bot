@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BotConfig } from '../schemas/bot-config.schema';
-import { config } from '../../../config';
+import { CONFIG } from '../../../config';
 
 @Injectable()
 export class BotConfigService {
@@ -19,7 +19,7 @@ export class BotConfigService {
 
       const appEnvKey: keyof BotConfig = 'appEnv';
       const configDoc = await this.botConfigModel
-        .findOne({ [appEnvKey]: config.appEnv })
+        .findOne({ [appEnvKey]: CONFIG.appEnv })
         .exec();
       this.botConfig = configDoc?.toJSON();
 
@@ -53,7 +53,7 @@ export class BotConfigService {
     try {
       const appEnvKey: keyof BotConfig = 'appEnv';
       await this.botConfigModel.findOneAndUpdate(
-        { [appEnvKey]: config.appEnv },
+        { [appEnvKey]: CONFIG.appEnv },
         { $set: { [key]: value } },
       );
 
