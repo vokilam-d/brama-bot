@@ -86,13 +86,16 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       return;
     }
 
-    const isNew = !lastProcessed?.isSent;
+    const isNew = lastProcessed?.isSent;
     const messageText = new BotMessageText()
       .addLine(BotMessageText.bold(buildScheduleTitleLine(normalizedDate, isNew)))
       .newLine();
-    messageText.merge(buildDayScheduleMessage(normalizedSchedule.hours, normalizedDate));
+    messageText.merge(buildDayScheduleMessage(normalizedSchedule.hours));
 
     await this.botService.sendMessageToAllEnabledGroups(messageText);
+    void this.botService.sendMessageToOwner(
+      new BotMessageText(`Джерело графіка: ${providerId}`),
+    );
     await this.persistProcessed(providerId, dateIso, effectiveUpdatedAt, normalizedSchedule.hours, true);
 
     this.logger.debug(
@@ -134,12 +137,14 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     const dateIso = date.toISOString();
 
     let hours: IScheduleItemHours | null = null;
+    let providerId: PowerScheduleProviderId | undefined;
     const fromStore = await this.processedScheduleInfoModel
       .findOne({ dateIso })
       .sort({ updatedAt: -1 })
       .exec();
     if (fromStore) {
       hours = fromStore.scheduleItemHours as unknown as IScheduleItemHours;
+      providerId = fromStore.providerId;
     }
 
     if (!hours) {
@@ -154,12 +159,17 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       .add(scheduleTitleWithDay)
       .newLine()
       .newLine();
-    messageText.merge(buildDayScheduleMessage(hours, date));
+    messageText.merge(buildDayScheduleMessage(hours));
 
     if (chatId !== undefined) {
       await this.botService.sendMessage(chatId, messageText);
     } else if (sendToGroups) {
       await this.botService.sendMessageToAllEnabledGroups(messageText);
+    }
+    if (providerId) {
+      void this.botService.sendMessageToOwner(
+        new BotMessageText(`Джерело графіка: ${providerId}`),
+      );
     }
   }
 }

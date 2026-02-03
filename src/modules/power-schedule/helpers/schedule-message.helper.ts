@@ -10,7 +10,6 @@ export function buildScheduleTitleLine(date: Date, isNew: boolean): string {
 
 export function buildDayScheduleMessage(
   hours: IScheduleItemHours,
-  date: Date,
 ): BotMessageText {
   const halfHours = Object.keys(hours).sort() as (keyof IScheduleItemHours)[];
 

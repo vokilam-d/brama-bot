@@ -2,7 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { PowerScheduleProviderId } from '../interfaces/schedule.interface';
 import { ScheduleItemHours, ScheduleItemHoursSchema } from './schedule-item-hours.schema';
 
-@Schema({ collection: 'power-schedule-processed' })
+@Schema({ collection: 'processed-power-schedules' })
 export class ProcessedScheduleInfo {
   @Prop({ required: true })
   dateIso: string;

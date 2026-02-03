@@ -81,8 +81,8 @@ export class KdService implements OnApplicationBootstrap {
     this.logger.debug(`Requesting feed`);
     this.handleFeed().then();
 
-    this.logger.debug(`Requesting schedule`);
-    this.handleScheduleChanges().then();
+    // this.logger.debug(`Requesting schedule`);
+    // this.handleScheduleChanges().then(); // TEMP: disabled
 
     this.logLastTwoProcessedScheduleInfos().then();
   }
@@ -423,6 +423,7 @@ export class KdService implements OnApplicationBootstrap {
   }
 
   private async handleScheduleChanges(): Promise<void> {
+    return; // TEMP: disabled
     const today = new Date();
     today.setHours(6, 0, 0, 0); // set to 6 hours to avoid DST/time zone issues
     const tomorrow = new Date(today);

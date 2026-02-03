@@ -11,4 +11,8 @@ export const config = {
   kdDtekObjectsRequestIntervalMs: 60 * 1000, // 1 min
   appEnv: process.env.APP_ENV,
   socks5Proxy: process.env.SOCKS5_PROXY,
+  dtekStreet: process.env.DTEK_STREET ?? 'вул. Здановської Юлії',
+  dtekBuilding: process.env.DTEK_BUILDING ?? '71/З',
+  dtekPollIntervalMs: Number(process.env.DTEK_POLL_INTERVAL_MS ?? 15 * 60 * 1000),
+  dtekPuppeteerHeadless: process.env.DTEK_PUPPETEER_HEADLESS ?? 'new',
 };
