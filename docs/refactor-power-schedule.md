@@ -101,3 +101,10 @@ flowchart LR
 4. **(Later)** Dtek provider: Implement polling + change detection + notify orchestrator.
 5. **(Later)** Yasno provider: Same.
 6. **Cleanup**: Remove or slim down KD-only processed schedule collection if fully replaced; update config and README as needed.
+
+## Schedule settings (disableable via bot)
+
+- **Config lives in power-schedule module**: [PowerScheduleConfig](../src/modules/power-schedule/schemas/power-schedule-config.schema.ts) (collection `power-schedule-config`) and [PowerScheduleConfigService](../src/modules/power-schedule/services/power-schedule-config.service.ts). Not in BotConfig; schedule toggles are the power-schedule module’s responsibility.
+- **Global switch** (`scheduleSendingEnabled`): When false, the orchestrator does not send schedule messages to groups (on notify or on-demand "send to all"). Schedule changes are still persisted.
+- **Per-provider switches** (`enabledProviderIds: PowerScheduleProviderId[]` — only providers in this array run; when missing/empty, all enabled (same enum as rest of module): When disabled, that provider’s polling loop is stopped (and can be restarted by toggling back via bot).
+- **Single command** `/schedule_settings`: Owner sends this in private chat; bot replies with a message and an inline keyboard to toggle each of the four switches. Callback buttons update PowerScheduleConfig and refresh the message. No separate commands per switch.

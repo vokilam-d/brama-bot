@@ -9,6 +9,6 @@ export class BotController {
 
   @Post('tg-webhook')
   async tgWebhook(@Body() update: ITelegramUpdate): Promise<void> {
-    this.botService.onNewIncomingMessage(update).then();
+    this.botService.onNewTelegramUpdate(update).then();
   }
 }

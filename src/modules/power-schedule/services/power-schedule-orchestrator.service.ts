@@ -2,6 +2,7 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BotService, PendingMessageType } from '../../bot/services/bot.service';
+import { PowerScheduleConfigService } from './power-schedule-config.service';
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
 import {
   INormalizedSchedule,
@@ -24,6 +25,7 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     @InjectModel(ProcessedScheduleInfo.name)
     private processedScheduleInfoModel: Model<ProcessedScheduleInfo>,
     private readonly botService: BotService,
+    private readonly powerScheduleConfigService: PowerScheduleConfigService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -80,8 +82,10 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
 
     messageText.newLine().addLine(`Джерело графіка: ${providerId}`);
 
-    await this.botService.sendMessageToAllEnabledGroups(messageText);
-    // void this.botService.sendMessageToOwner(new BotMessageText(`Джерело графіка: ${providerId}`));
+    const scheduleSendingEnabled = this.powerScheduleConfigService.getConfig().scheduleSendingEnabled ?? true;
+    if (scheduleSendingEnabled) {
+      await this.botService.sendMessageToAllEnabledGroups(messageText);
+    }
     await this.persistProcessed(providerId, dateIso, new Date(), normalizedSchedule.hours, true);
 
     this.logger.debug(`Schedule sent: dateIso=${dateIso}, providerId=${providerId}`);
@@ -148,9 +152,10 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       .newLine();
     messageText.merge(buildDayScheduleMessage(hours));
 
+    const scheduleSendingEnabled = this.powerScheduleConfigService.getConfig().scheduleSendingEnabled ?? true;
     if (chatId !== undefined) {
       await this.botService.sendMessage(chatId, messageText);
-    } else if (sendToGroups) {
+    } else if (sendToGroups && scheduleSendingEnabled) {
       await this.botService.sendMessageToAllEnabledGroups(messageText);
     }
     if (providerId) {

@@ -16,6 +16,7 @@ import { IPowerScheduleProvider } from '../../power-schedule/interfaces/power-sc
 import { PowerScheduleOrchestratorService } from '../../power-schedule/services/power-schedule-orchestrator.service';
 import { normalizeScheduleDate } from '../../power-schedule/helpers/normalize-schedule-date.helper';
 import { BotService } from '../../bot/services/bot.service';
+import { PowerScheduleConfigService } from '../../power-schedule/services/power-schedule-config.service';
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
 import {
   normalizeYasnoSlots,
@@ -64,6 +65,7 @@ export class YasnoScheduleService implements IPowerScheduleProvider, OnApplicati
     private readonly httpService: HttpService,
     private readonly powerScheduleOrchestrator: PowerScheduleOrchestratorService,
     private readonly botService: BotService,
+    private readonly powerScheduleConfigService: PowerScheduleConfigService,
   ) {}
 
   getId(): string {
@@ -75,13 +77,23 @@ export class YasnoScheduleService implements IPowerScheduleProvider, OnApplicati
       this.logger.warn(`Yasno polling disabled (interval is falsy)`);
       return;
     }
-
-    void this.schedulePollAndNotify();
+    this.powerScheduleConfigService.events.on('configUpdated', () => this.applyScheduleProviderEnabled());
+    this.applyScheduleProviderEnabled();
   }
 
   onModuleDestroy(): void {
     if (this.pollTimer) {
       clearTimeout(this.pollTimer);
+    }
+  }
+
+  private applyScheduleProviderEnabled(): void {
+    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno) ?? true;
+    if (enabled && !this.pollTimer) {
+      void this.schedulePollAndNotify();
+    } else if (!enabled && this.pollTimer) {
+      clearTimeout(this.pollTimer);
+      this.pollTimer = undefined;
     }
   }
 
@@ -100,6 +112,10 @@ export class YasnoScheduleService implements IPowerScheduleProvider, OnApplicati
   }
 
   private async schedulePollAndNotify(): Promise<void> {
+    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno) ?? true;
+    if (!enabled) {
+      return;
+    }
     await this.pollAndNotify();
     this.pollTimer = setTimeout(() => this.schedulePollAndNotify(), this.pollIntervalMs);
   }

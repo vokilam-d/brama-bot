@@ -12,11 +12,15 @@ import { EventEmitter } from 'events';
 import { BotSentMessage } from '../schemas/bot-sent-message.schema';
 import { BotIncomingMessage } from '../schemas/bot-incoming-message.schema';
 import { ITelegramUpdate } from '../interfaces/telegram-update.interface';
+import { ITelegramCallbackQuery } from '../interfaces/telegram-callback-query.interface';
+import { ITelegramInlineKeyboardButton } from '../interfaces/inline-keyboard-button.interface';
 import {
   TelegramApiService,
   ApiMethodName,
 } from './telegram-api.service';
 import { BotConfigService } from './bot-config.service';
+import { PowerScheduleConfigService } from '../../power-schedule/services/power-schedule-config.service';
+import { PowerScheduleProviderId } from '../../power-schedule/interfaces/schedule.interface';
 
 export type ReplyMarkup = ITelegramInlineKeyboardMarkup | ITelegramReplyKeyboardMarkup | ITelegramReplyKeyboardRemove;
 
@@ -46,6 +50,7 @@ enum AdminBotCommand {
   EshopGetInfo = '/eshop_info',
   PowerStatusGroup = '/power_status_group',
   GetPowerStatus = '/get_power_status',
+  ScheduleSettings = '/schedule_settings',
 }
 
 @Injectable()
@@ -66,6 +71,7 @@ export class BotService implements OnApplicationBootstrap {
     @InjectModel(BotIncomingMessage.name) private botIncomingMessageModel: Model<BotIncomingMessage>,
     private readonly telegramApiService: TelegramApiService,
     private readonly botConfigService: BotConfigService,
+    private readonly powerScheduleConfigService: PowerScheduleConfigService,
   ) {
   }
 
@@ -83,14 +89,35 @@ export class BotService implements OnApplicationBootstrap {
     // this.telegramApiService.execMethod('editMessageText' as any, { chat_id: -1002164849966, message_id: 378, text: text, parse_mode: 'HTML' });
   }
 
-  async onNewIncomingMessage(update: ITelegramUpdate): Promise<void> {
-    const message = update.message;
-    const senderId = message?.from?.id;
-    const botConfig = this.botConfigService.getConfig();
-    const isOwnerMessage = message && botConfig.ownerIds.includes(senderId);
-    const isPrivateChat = message?.chat?.type === 'private';
+  async onNewTelegramUpdate(update: ITelegramUpdate): Promise<void> {
+    const callbackQuery = update.callback_query;
+    if (callbackQuery) {
+      await this.onNewTelegramCallbackQuery(callbackQuery);
+    }
 
-    if (message?.reply_to_message) {
+    const message = update.message;
+    if (message) {
+      await this.onNewTelegramMessage(message);
+    }
+
+    await this.persistAndForwardIncomingUpdate(update);
+  }
+
+  private async onNewTelegramCallbackQuery(callbackQuery: ITelegramCallbackQuery): Promise<void> {
+    const botConfig = this.botConfigService.getConfig();
+    const isOwner = botConfig.ownerIds.includes(callbackQuery.from.id);
+    if (isOwner && callbackQuery.data?.startsWith('schedule_')) {
+      await this.onScheduleSettingsCallback(callbackQuery);
+    }
+  }
+
+  private async onNewTelegramMessage(message: ITelegramMessage): Promise<void> {
+    const senderId = message.from?.id;
+    const botConfig = this.botConfigService.getConfig();
+    const isOwnerMessage = botConfig.ownerIds.includes(senderId);
+    const isPrivateChat = message.chat.type === 'private';
+
+    if (message.reply_to_message) {
       await this.onReply(message);
     }
 
@@ -131,10 +158,6 @@ export class BotService implements OnApplicationBootstrap {
     const isStartCommand = message && isPrivateChat && message.text === '/start';
     if (isStartCommand) {
       await this.sendStartMessage(message);
-    }
-
-    if (!isOwnerMessage) {
-      await this.persistAndForwardIncomingUpdate(update);
     }
   }
 
@@ -215,16 +238,22 @@ export class BotService implements OnApplicationBootstrap {
 
   private async persistAndForwardIncomingUpdate(update: ITelegramUpdate): Promise<void> {
     const botConfig = this.botConfigService.getConfig();
+    const isOwnerMessage = update.message && botConfig.ownerIds.includes(update.message.from?.id);
+    const isPowerStatusGroupMessage = update.message?.chat.id === botConfig.powerStatusGroupId;
+    const isEshopChatMessage = update.message?.chat.id === botConfig.eshopChatId;
+    
     if (
-      update.message?.chat.id === botConfig.powerStatusGroupId
-      || update.message?.chat.id === botConfig.eshopChatId
+      isOwnerMessage
+      || update.edited_message
+      || update.message?.new_chat_members
+      || isPowerStatusGroupMessage
+      || isEshopChatMessage
     ) {
       return;
     }
 
-    const persistedMessage = update.message ?? update;
     try {
-      await this.botIncomingMessageModel.create({ message: persistedMessage });
+      await this.botIncomingMessageModel.create({ message: update });
     } catch (e) {
       this.logger.error(`Creating incoming message: Failed:`);
       this.logger.error(e);
@@ -233,7 +262,7 @@ export class BotService implements OnApplicationBootstrap {
 
     try {
       await this.sendMessageToOwner(
-        new BotMessageText(BotMessageText.code(JSON.stringify(persistedMessage, null, 2), 'json')),
+        new BotMessageText(BotMessageText.code(JSON.stringify(update, null, 2), 'json')),
       );
     } catch (e) {
       const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
@@ -324,6 +353,13 @@ export class BotService implements OnApplicationBootstrap {
         case AdminBotCommand.SendScheduleTomorrowToAll: {
           this.events.emit(PendingMessageType.SendScheduleToAll, { day: 'tomorrow' });
           await this.likeMessage(chatId, message.message_id);
+          break;
+        }
+
+        case AdminBotCommand.ScheduleSettings: {
+          const scheduleText = this.buildScheduleSettingsText();
+          const scheduleKeyboard = this.buildScheduleSettingsKeyboard();
+          await this.sendMessage(chatId, scheduleText, { replyMarkup: scheduleKeyboard });
           break;
         }
 
@@ -691,6 +727,80 @@ export class BotService implements OnApplicationBootstrap {
         this.logger.error(`Failed to persist sent message: ${e.message}`);
         void this.sendMessageToOwner(new BotMessageText(`Failed to persist sent message: ${e.message}`));
       }
+    }
+  }
+
+  private buildScheduleSettingsText(): BotMessageText {
+    const c = this.powerScheduleConfigService.getConfig();
+    const sending = (c.scheduleSendingEnabled ?? true) ? 'ON' : 'OFF';
+    const kd = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Kd) ? 'ON' : 'OFF';
+    const dtek = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ? 'ON' : 'OFF';
+    const yasno = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno) ? 'ON' : 'OFF';
+    return new BotMessageText(BotMessageText.bold('Графік: налаштування'))
+      .newLine()
+      .addLine(`Надсилання в групи: ${sending}`)
+      .addLine(`KD: ${kd} | Dtek: ${dtek} | Yasno: ${yasno}`)
+      .newLine()
+      .addLine('Натисніть кнопку, щоб перемкнути.');
+  }
+
+  private buildScheduleSettingsKeyboard(): ITelegramInlineKeyboardMarkup {
+    const c = this.powerScheduleConfigService.getConfig();
+    const btn = (label: string, data: string): ITelegramInlineKeyboardButton => ({
+      text: label,
+      callback_data: data,
+    });
+    const sending = (c.scheduleSendingEnabled ?? true) ? '✅ Надсилання' : '❌ Надсилання';
+    const kd = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Kd) ? '✅ KD' : '❌ KD';
+    const dtek = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ? '✅ Dtek' : '❌ Dtek';
+    const yasno = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno) ? '✅ Yasno' : '❌ Yasno';
+    return {
+      inline_keyboard: [
+        [btn(sending, 'schedule_toggle_sending')],
+        [btn(kd, 'schedule_toggle_kd'), btn(dtek, 'schedule_toggle_dtek'), btn(yasno, 'schedule_toggle_yasno')],
+      ],
+    };
+  }
+
+  private async onScheduleSettingsCallback(callbackQuery: ITelegramCallbackQuery): Promise<void> {
+    const data = callbackQuery.data;
+    if (!data) {
+      return;
+    }
+    const providerIdByData: Record<string, PowerScheduleProviderId> = {
+      schedule_toggle_kd: PowerScheduleProviderId.Kd,
+      schedule_toggle_dtek: PowerScheduleProviderId.Dtek,
+      schedule_toggle_yasno: PowerScheduleProviderId.Yasno,
+    };
+    try {
+      if (data === 'schedule_toggle_sending') {
+        const c = this.powerScheduleConfigService.getConfig();
+        const current = c.scheduleSendingEnabled ?? true;
+        await this.powerScheduleConfigService.updateConfig('scheduleSendingEnabled', !current);
+      } else if (providerIdByData[data]) {
+        await this.powerScheduleConfigService.toggleProviderEnabled(providerIdByData[data]);
+      } else {
+        return;
+      }
+      await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
+        callback_query_id: callbackQuery.id,
+      });
+      const text = this.buildScheduleSettingsText();
+      const keyboard = this.buildScheduleSettingsKeyboard();
+      await this.telegramApiService.execMethod(ApiMethodName.EditMessageText, {
+        chat_id: callbackQuery.message.chat.id,
+        message_id: callbackQuery.message.message_id,
+        text: text.toString(),
+        parse_mode: this.textParseMode,
+        reply_markup: keyboard,
+      });
+    } catch (e) {
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
+      this.logger.error(`Schedule settings callback failed: ${errorMessage}`);
+      await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
+        callback_query_id: callbackQuery.id,
+        text: errorMessage,
+      });
     }
   }
 

@@ -10,6 +10,7 @@ import { IPowerScheduleProvider } from '../../power-schedule/interfaces/power-sc
 import { PowerScheduleOrchestratorService } from '../../power-schedule/services/power-schedule-orchestrator.service';
 import { normalizeScheduleDate } from '../../power-schedule/helpers/normalize-schedule-date.helper';
 import { BotService } from '../../bot/services/bot.service';
+import { PowerScheduleConfigService } from '../../power-schedule/services/power-schedule-config.service';
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
 import {
   DtekSlotValue,
@@ -89,6 +90,7 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
   constructor(
     private readonly powerScheduleOrchestrator: PowerScheduleOrchestratorService,
     private readonly botService: BotService,
+    private readonly powerScheduleConfigService: PowerScheduleConfigService,
   ) {}
 
   getId(): string {
@@ -100,13 +102,23 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
       this.logger.warn(`DTEK polling disabled (interval is falsy)`);
       return;
     }
-
-    this.schedulePollAndNotify();
+    this.powerScheduleConfigService.events.on('configUpdated', () => this.applyScheduleProviderEnabled());
+    this.applyScheduleProviderEnabled();
   }
 
   onModuleDestroy(): void {
     if (this.pollTimer) {
-      clearInterval(this.pollTimer);
+      clearTimeout(this.pollTimer);
+    }
+  }
+
+  private applyScheduleProviderEnabled(): void {
+    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ?? true;
+    if (enabled && !this.pollTimer) {
+      void this.schedulePollAndNotify();
+    } else if (!enabled && this.pollTimer) {
+      clearTimeout(this.pollTimer);
+      this.pollTimer = undefined;
     }
   }
 
@@ -127,6 +139,10 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
   }
 
   private async schedulePollAndNotify(): Promise<void> {
+    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ?? true;
+    if (!enabled) {
+      return;
+    }
     await this.pollAndNotify();
     this.pollTimer = setTimeout(() => this.schedulePollAndNotify(), this.pollIntervalMs);
   }
@@ -240,6 +256,11 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
           return new Promise((resolve, reject) => {
             // DisconSchedule is a top-level `let`, not on window; use indirect eval to read from global scope
             const ds: DisconSchedule = (0, eval)('typeof DisconSchedule !== "undefined" ? DisconSchedule : null');
+            if (!ds) {
+              reject(new Error(`DisconSchedule is not available (html=${document.documentElement.outerHTML})`));
+              return;
+            }
+
             if (!ds?.ajax?.url) {
               reject(new Error(`DisconSchedule.ajax not available. (ds=${JSON.stringify(ds)})`));
               return;
