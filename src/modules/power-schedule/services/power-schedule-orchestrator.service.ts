@@ -9,7 +9,11 @@ import {
   PowerScheduleProviderId,
 } from '../interfaces/schedule.interface';
 import { ProcessedScheduleInfo } from '../schemas/processed-schedule-info.schema';
-import { buildDayScheduleMessage, buildScheduleTitleLine } from '../helpers/schedule-message.helper';
+import {
+  buildDayScheduleMessage,
+  buildScheduleTitleLine,
+} from '../helpers/schedule-message.helper';
+import { normalizeScheduleDate } from '../helpers/normalize-schedule-date.helper';
 import { getMonthName } from '../../../helpers/get-month-name.helper';
 
 @Injectable()
@@ -38,15 +42,6 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
   }
 
   /**
-   * Normalize date to 12 PM to avoid timezone/DST issues
-   */
-  normalizeDate(date: Date): Date {
-    const normalized = new Date(date);
-    normalized.setHours(12, 0, 0, 0);
-    return normalized;
-  }
-
-  /**
    * Called by a provider when it detects a new or changed schedule for a date.
    * Orchestrator decides whether to send (most recent wins) and persists.
    */
@@ -55,7 +50,7 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     date: Date,
     normalizedSchedule: INormalizedSchedule,
   ): Promise<void> {
-    const normalizedDate = this.normalizeDate(date);
+    const normalizedDate = normalizeScheduleDate(date);
     const dateIso = normalizedDate.toISOString();
 
     const lastProcessedDoc = await this.processedScheduleInfoModel
@@ -120,7 +115,7 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     chatId?: number,
     sendToGroups = false,
   ): Promise<void> {
-    const date = this.normalizeDate(new Date());
+    const date = normalizeScheduleDate(new Date());
     let dayName = 'сьогодні';
     if (day === 'tomorrow') {
       date.setDate(date.getDate() + 1);

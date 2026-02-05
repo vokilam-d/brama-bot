@@ -72,7 +72,7 @@ export class BotService implements OnApplicationBootstrap {
   async onApplicationBootstrap(): Promise<void> {
     // this.setWebhook();
 
-    await this.botConfigService.ensureAndCacheConfig();
+    await this.botConfigService.whenReady();
 
     const botConfig = this.botConfigService.getConfig();
     if (!botConfig.ownerIds[0]) {

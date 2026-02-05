@@ -14,6 +14,7 @@ import {
 } from '../../power-schedule/interfaces/schedule.interface';
 import { IPowerScheduleProvider } from '../../power-schedule/interfaces/power-schedule-provider.interface';
 import { PowerScheduleOrchestratorService } from '../../power-schedule/services/power-schedule-orchestrator.service';
+import { normalizeScheduleDate } from '../../power-schedule/helpers/normalize-schedule-date.helper';
 import { BotService } from '../../bot/services/bot.service';
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
 import {
@@ -87,9 +88,9 @@ export class YasnoScheduleService implements IPowerScheduleProvider, OnApplicati
   async getScheduleForDate(date: Date): Promise<INormalizedSchedule | null> {
     try {
       const schedules = await this.fetchSchedules();
-      const targetIso = this.powerScheduleOrchestrator.normalizeDate(date).toISOString();
+      const targetIso = normalizeScheduleDate(date).toISOString();
       const match = schedules.find((schedule) => {
-        return this.powerScheduleOrchestrator.normalizeDate(schedule.date).toISOString() === targetIso;
+        return normalizeScheduleDate(schedule.date).toISOString() === targetIso;
       });
       return match ?? null;
     } catch (error) {
@@ -162,7 +163,7 @@ export class YasnoScheduleService implements IPowerScheduleProvider, OnApplicati
       }
 
       const hours = normalizeYasnoSlots(dayData.slots);
-      const date = this.powerScheduleOrchestrator.normalizeDate(new Date(dayData.date));
+      const date = normalizeScheduleDate(new Date(dayData.date));
       schedules.push({ date, hours });
     }
 

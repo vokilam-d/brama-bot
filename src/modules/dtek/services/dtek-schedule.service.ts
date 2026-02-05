@@ -8,6 +8,7 @@ import {
 } from '../../power-schedule/interfaces/schedule.interface';
 import { IPowerScheduleProvider } from '../../power-schedule/interfaces/power-schedule-provider.interface';
 import { PowerScheduleOrchestratorService } from '../../power-schedule/services/power-schedule-orchestrator.service';
+import { normalizeScheduleDate } from '../../power-schedule/helpers/normalize-schedule-date.helper';
 import { BotService } from '../../bot/services/bot.service';
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
 import {
@@ -112,10 +113,10 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
   async getScheduleForDate(date: Date): Promise<INormalizedSchedule | null> {
     try {
       const schedules = await this.fetchSchedules();
-      const targetIso = this.normalizeDate(date).toISOString();
+      const targetIso = normalizeScheduleDate(date).toISOString();
 
       const match = schedules.find((schedule) => {
-        return this.normalizeDate(schedule.date).toISOString() === targetIso;
+        return normalizeScheduleDate(schedule.date).toISOString() === targetIso;
       });
 
       return match ?? null;
@@ -134,15 +135,13 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
     try {
       const schedules = await this.fetchSchedules();
       for (const schedule of schedules) {
+        const dateIso = normalizeScheduleDate(schedule.date).toISOString();
         if (isAllPowerOn(schedule.hours)) {
-          const dateIso = this.normalizeDate(schedule.date).toISOString();
           this.lastScheduleHashes.delete(dateIso);
-          this.logger.debug(`Skipping ${dateIso}: schedule not published yet (all slots On)`);
           continue;
         }
 
         const hash = this.hashSchedule(schedule.hours);
-        const dateIso = this.normalizeDate(schedule.date).toISOString();
         if (this.lastScheduleHashes.get(dateIso) === hash) {
           continue;
         }
@@ -281,16 +280,10 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
       return new Date();
     }
 
-    return this.normalizeDate(new Date(numeric * 1000));
+    return normalizeScheduleDate(new Date(numeric * 1000));
   }
 
   private hashSchedule(hours: IScheduleItemHours): string {
     return JSON.stringify(hours);
-  }
-
-  private normalizeDate(date: Date): Date {
-    const normalized = new Date(date);
-    normalized.setHours(12, 0, 0, 0); // 12 hours to avoid timezone/DST issues
-    return normalized;
   }
 }

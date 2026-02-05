@@ -10,13 +10,10 @@ import { IFeedItem, IFeedResponse } from '../interfaces/feed-response.interface'
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
 import { AxiosError, AxiosResponse } from 'axios';
 import { KdProcessedFeedItem } from '../schemas/kd-processed-feed-item.schema';
-import { KdProcessedScheduleInfo } from '../schemas/kd-processed-schedule-info.schema';
-import { IScheduleItem, IScheduleResponse, PowerState } from '../interfaces/schedule-response.interface';
+import { IScheduleItem, IScheduleResponse } from '../interfaces/schedule-response.interface';
 import { wait } from '../../../helpers/wait.function';
 import { pad } from '../../../helpers/pad.function';
 import { IDtekObjectsResponse } from '../interfaces/dtek-response.interface';
-import { PowerScheduleOrchestratorService } from '../../power-schedule/services/power-schedule-orchestrator.service';
-import { PowerScheduleProviderId } from '../../power-schedule/interfaces/schedule.interface';
 
 // login method 0 - sms, input 4 digits
 // login method 1 - incoming call, input last 3 digits of phone number
@@ -27,10 +24,12 @@ enum FeedItemIdPrefix {
 
 @Injectable()
 export class KdService implements OnApplicationBootstrap {
-
   private logger = new Logger(KdService.name);
 
-  private cachedKdConfig: KdConfig;
+  private readonly whenReadyPromise: Promise<void>;
+  private resolveReady!: () => void;
+
+  private cachedKdConfig!: KdConfig;
   private feedRequestsCounter = {
     count: 0,
     limitsLeft: new Set(),
@@ -44,11 +43,17 @@ export class KdService implements OnApplicationBootstrap {
   constructor(
     @InjectModel(KdConfig.name) private kdConfigModel: Model<KdConfig>,
     @InjectModel(KdProcessedFeedItem.name) private kdProcessedFeedItemModel: Model<KdProcessedFeedItem>,
-    @InjectModel(KdProcessedScheduleInfo.name) private kdProcessedScheduleInfoModel: Model<KdProcessedScheduleInfo>,
     private readonly httpService: HttpService,
     private readonly botService: BotService,
-    private readonly powerScheduleOrchestrator: PowerScheduleOrchestratorService,
   ) {
+    this.whenReadyPromise = new Promise<void>((resolve) => {
+      this.resolveReady = resolve;
+    });
+  }
+
+  /** Resolves when config is cached and token is validated. Dependents should await before using getWeekSchedule. */
+  whenReady(): Promise<void> {
+    return this.whenReadyPromise;
   }
 
   async onApplicationBootstrap(): Promise<void> {
@@ -73,6 +78,8 @@ export class KdService implements OnApplicationBootstrap {
       await this.validatePersistedToken();
     } catch (e) {
       this.onError(e, `Failed to init`);
+    } finally {
+      this.resolveReady();
     }
 
     this.logger.debug(`Dtek object id=${CONFIG.kyivDigital.dtekObjectId}, checking it`);
@@ -80,11 +87,6 @@ export class KdService implements OnApplicationBootstrap {
 
     this.logger.debug(`Requesting feed`);
     this.handleFeed().then();
-
-    // this.logger.debug(`Requesting schedule`);
-    // this.handleScheduleChanges().then(); // TEMP: disabled
-
-    this.logLastTwoProcessedScheduleInfos().then();
   }
 
   private async ensureAndCacheConfig(): Promise<void> {
@@ -307,7 +309,7 @@ export class KdService implements OnApplicationBootstrap {
     await this.persistConfig();
   }
 
-  private async getWeekSchedule(tryCount: number = 1): Promise<IScheduleItem[]> {
+  async getWeekSchedule(tryCount: number = 1): Promise<IScheduleItem[] | null> {
     const url = `${this.apiHost}/v4/dtek/${CONFIG.kyivDigital.dtekObjectId}`;
     const requestConfig = this.buildRequestConfig('get', url);
 
@@ -325,10 +327,10 @@ export class KdService implements OnApplicationBootstrap {
         return this.getWeekSchedule(tryCount + 1);
       }
 
-      return;
+      return null;
     }
 
-    return response.data.schedule;
+    return response.data.schedule ?? null;
   }
 
   private async checkDtekObject(tryCount: number = 1): Promise<void> {
@@ -422,91 +424,6 @@ export class KdService implements OnApplicationBootstrap {
     this.logger.debug(processedFeedItem);
   }
 
-  private async handleScheduleChanges(): Promise<void> {
-    return; // TEMP: disabled
-    const today = new Date();
-    today.setHours(6, 0, 0, 0); // set to 6 hours to avoid DST/time zone issues
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const weekSchedule = await this.getWeekSchedule();
-    if (!weekSchedule) {
-      setTimeout(() => this.handleScheduleChanges(), CONFIG.kyivDigital.feedRequestIntervalMs * 10);
-      return;
-    }
-
-    for (const date of [today, tomorrow]) {
-      const dayInKdFormat = this.buildDayInKdFormat(date);
-      const schedule = weekSchedule.find(schedule => schedule.day_of_week === dayInKdFormat);
-      if (!schedule) {
-        this.botService.sendMessageToOwner(new BotMessageText(`CRITICAL - No schedule found for date ${date.toISOString()}`)).then();
-        continue;
-      }
-
-      const processedScheduleInfoDoc = await this.kdProcessedScheduleInfoModel.findOne({ dateIso: date.toISOString() });
-      if (processedScheduleInfoDoc) {
-        const isScheduleTheSame = Object.keys(schedule.hours).every(halfHour => {
-          const currentPowerState = schedule.hours[halfHour];
-          const processedPowerState = processedScheduleInfoDoc.scheduleItemHours[halfHour];
-          return currentPowerState === processedPowerState;
-        });
-
-        if (isScheduleTheSame) {
-          continue;
-        }
-      }
-
-      const persistProcessedScheduleInfo = async (isSent: boolean): Promise<void> => {
-        if (processedScheduleInfoDoc) {
-          processedScheduleInfoDoc.isSent = isSent;
-          processedScheduleInfoDoc.scheduleItemHours = schedule.hours;
-          await processedScheduleInfoDoc.save();
-        } else {
-          const newProcessedScheduleInfo: KdProcessedScheduleInfo = {
-            dateIso: date.toISOString(),
-            scheduleItemHours: schedule.hours,
-            isSent: isSent,
-          };
-          await this.kdProcessedScheduleInfoModel.create(newProcessedScheduleInfo);
-        }
-
-        this.logger.debug(`Persisted processed schedule info (isNew=${!processedScheduleInfoDoc}, date=${date.toISOString()}, isSent=${isSent}, scheduleItemHours=${JSON.stringify(schedule.hours)})`);
-      };
-
-      const isScheduleNotSetup = Object.values(schedule.hours).some(powerState => powerState === PowerState.MaybeOff);
-      if (isScheduleNotSetup) {
-        this.logger.debug(`Schedule not setup (date=${date.toISOString()})`);
-        await persistProcessedScheduleInfo(false);
-        continue;
-      }
-
-      this.logger.debug(
-        `Schedule change detected (date=${date.toISOString()}, hours=${JSON.stringify(schedule.hours)})`,
-      );
-
-      await this.powerScheduleOrchestrator.onScheduleChange(
-        PowerScheduleProviderId.Kd,
-        date,
-        { date, hours: schedule.hours },
-      );
-      await persistProcessedScheduleInfo(true);
-    }
-
-    setTimeout(() => this.handleScheduleChanges(), CONFIG.kyivDigital.feedRequestIntervalMs);
-  }
-
-  private async logLastTwoProcessedScheduleInfos(): Promise<void> {
-    const lastTwoProcessedScheduleInfos = await this.kdProcessedScheduleInfoModel
-      .find()
-      .sort({ dateIso: -1 })
-      .limit(2)
-      .exec();
-    this.logger.debug(`Last two processed schedule infos:`);
-    for (const processedScheduleInfo of lastTwoProcessedScheduleInfos) {
-      this.logger.debug(JSON.stringify(processedScheduleInfo.toJSON()));
-    }
-  }
-
   private buildDateByItemCreatedAt(created_at: number): Date {
     return new Date(created_at * 1000);
   }
@@ -527,13 +444,5 @@ export class KdService implements OnApplicationBootstrap {
     if (sendToOwner) {
       this.botService.sendMessageToOwner(new BotMessageText(`${description}: ${message}`)).then();
     }
-  }
-
-  private buildDayInKdFormat(date: Date): number {
-    let day = date.getDay();
-    if (day === 0) { // force to KD indexes, where Sunday is 7, not 0 (like in JS Date)
-      day = 7;
-    }
-    return day;
   }
 }

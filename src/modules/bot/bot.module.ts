@@ -18,7 +18,7 @@ import { BotConfigService } from './services/bot-config.service';
     ]),
     HttpModule,
   ],
-  providers: [BotService, TelegramApiService, BotConfigService],
+  providers: [BotConfigService, TelegramApiService, BotService],
   controllers: [BotController],
   exports: [BotService],
 })
