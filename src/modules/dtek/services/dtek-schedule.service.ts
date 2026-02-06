@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
-import puppeteer, { LaunchOptions } from 'puppeteer';
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { CONFIG } from '../../../config';
 import {
   INormalizedSchedule,
@@ -76,6 +77,8 @@ interface DtekFetchResult {
   response: DtekGetHomeNumResponse;
   fact?: DtekFactPayload;
 }
+
+const INCAPSULA_WAIT_MS = 4000;
 
 @Injectable()
 export class DtekScheduleService implements IPowerScheduleProvider, OnApplicationBootstrap, OnModuleDestroy {
@@ -233,23 +236,29 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
   }
 
   private async fetchDtekPagePayload(): Promise<DtekFetchResult | null> {
-    const launchOptions: LaunchOptions = {
-      headless: true,
-    };
+    puppeteer.use(StealthPlugin());
 
-    const browser = await puppeteer.launch(launchOptions);
+    const browser = await puppeteer.launch({
+      headless: true,
+    });
 
     try {
       const page = await browser.newPage();
+      await page.setViewport({ width: 1920, height: 1080 });
       await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-          '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       );
+      await page.setExtraHTTPHeaders({
+        'Accept-Language': 'uk-UA,uk;q=0.9,en;q=0.8',
+      });
       page.setDefaultNavigationTimeout(60_000);
       await page.goto('https://www.dtek-kem.com.ua/ua/shutdowns', {
         waitUntil: 'networkidle2',
         timeout: 60_000,
       });
+
+      await new Promise((r) => setTimeout(r, INCAPSULA_WAIT_MS));
 
       const payload = await page.evaluate(
         ({ street }) => {
