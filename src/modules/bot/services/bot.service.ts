@@ -239,11 +239,13 @@ export class BotService implements OnApplicationBootstrap {
   private async persistAndForwardIncomingUpdate(update: ITelegramUpdate): Promise<void> {
     const botConfig = this.botConfigService.getConfig();
     const isOwnerMessage = update.message && botConfig.ownerIds.includes(update.message.from?.id);
+    const isOwnerCallbackQuery = update.callback_query && botConfig.ownerIds.includes(update.callback_query.from.id);
     const isPowerStatusGroupMessage = update.message?.chat.id === botConfig.powerStatusGroupId;
     const isEshopChatMessage = update.message?.chat.id === botConfig.eshopChatId;
-    
+
     if (
       isOwnerMessage
+      || isOwnerCallbackQuery
       || update.edited_message
       || update.message?.new_chat_members
       || isPowerStatusGroupMessage
