@@ -118,8 +118,12 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
   private applyScheduleProviderEnabled(): void {
     const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ?? true;
     if (enabled && !this.pollTimer) {
+      this.logger.debug(`DTEK provider enabled, starting schedule polling`);
+
       void this.schedulePollAndNotify();
     } else if (!enabled && this.pollTimer) {
+      this.logger.debug(`DTEK provider disabled, stopping schedule polling`);
+
       clearTimeout(this.pollTimer);
       this.pollTimer = undefined;
     }

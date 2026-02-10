@@ -57,8 +57,12 @@ export class KdScheduleService implements IPowerScheduleProvider, OnApplicationB
   private applyScheduleProviderEnabled(): void {
     const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Kd);
     if (enabled && !this.pollTimer) {
+      this.logger.debug(`KD provider enabled, starting schedule polling`);
+
       void this.schedulePollAndNotify();
     } else if (!enabled && this.pollTimer) {
+      this.logger.debug(`KD provider disabled, stopping schedule polling`);
+
       clearTimeout(this.pollTimer);
       this.pollTimer = undefined;
     }

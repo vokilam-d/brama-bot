@@ -85,10 +85,10 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     normalizedDate: Date,
     normalizedSchedule: INormalizedSchedule,
   ): Promise<void> {
-    const lastProcessedDoc = await this.processedScheduleInfoModel
+    const lastProcessed: ProcessedScheduleInfo = await this.processedScheduleInfoModel
       .findOne({ dateIso })
+      .lean()
       .exec();
-    const lastProcessed = lastProcessedDoc?.toJSON();
 
     if (lastProcessed) {
       const isScheduleChanged = Object.entries(lastProcessed.scheduleItemHours).some(([halfHour, processedPowerState]) => {
@@ -115,18 +115,18 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       .newLine()
       .merge(buildDayScheduleMessage(normalizedSchedule.hours));
 
-    if (this.isScheduleSendingEnabled()) {
+    if (this.powerScheduleConfigService.isScheduleSendingEnabled()) {
       await this.botService.sendMessageToAllEnabledGroups(messageText);
+
+      const ownerMessageText = new BotMessageText()
+        .addLine(`Sent (${providerId}, ${dateIso})`)
+        .newLine()
+        .merge(messageText);
+      void this.botService.sendMessageToOwner(ownerMessageText);
     } else {
       void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send schedule, but sending is disabled (${providerId}, ${dateIso})`));
     }
     await this.persistProcessed(providerId, dateIso, new Date(), normalizedSchedule.hours);
-
-    const ownerMessageText = new BotMessageText()
-      .addLine(`Sent (${providerId}, ${dateIso})`)
-      .newLine()
-      .merge(messageText);
-    void this.botService.sendMessageToOwner(ownerMessageText);
 
     this.logger.debug(`Schedule sent: dateIso=${dateIso}, providerId=${providerId}`);
   }
@@ -157,6 +157,8 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     chatId?: number,
     sendToGroups = false,
   ): Promise<void> {
+    this.logger.debug(`Sending schedule to chat... (day=${day}, chatId=${chatId}, sendToGroups=${sendToGroups})`);
+
     const date = normalizeScheduleDate(new Date());
     let dayName = 'сьогодні';
     if (day === 'tomorrow') {
@@ -165,19 +167,16 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     }
     const dateIso = date.toISOString();
 
-    let hours: IScheduleItemHours | null = null;
-    let providerId: PowerScheduleProviderId | undefined;
-    const fromStore = await this.processedScheduleInfoModel
-      .findOne({ dateIso })
-      .sort({ updatedAt: -1 })
+    const dateIsoKey: keyof ProcessedScheduleInfo = 'dateIso';
+    const lastProcessed: ProcessedScheduleInfo = await this.processedScheduleInfoModel
+      .findOne({ [dateIsoKey]: dateIso })
+      .lean()
       .exec();
-    if (fromStore) {
-      hours = fromStore.scheduleItemHours as unknown as IScheduleItemHours;
-      providerId = fromStore.providerId;
-    }
 
-    if (!hours) {
-      this.logger.warn(`No schedule available for ${day} (dateIso=${dateIso})`);
+    if (!lastProcessed) {
+      const message = `Sending schedule to chat: Failed: No schedule available for ${day} (dateIso=${dateIso}, chatId=${chatId}, sendToGroups=${sendToGroups})`;
+      this.logger.warn(message);
+      void this.botService.sendMessageToOwner(new BotMessageText(message));
       return;
     }
 
@@ -188,19 +187,22 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       .add(scheduleTitleWithDay)
       .newLine()
       .newLine();
-    messageText.merge(buildDayScheduleMessage(hours));
+    messageText.merge(buildDayScheduleMessage(lastProcessed.scheduleItemHours));
 
     if (chatId !== undefined) {
       await this.botService.sendMessage(chatId, messageText);
-    } else if (sendToGroups && this.isScheduleSendingEnabled()) {
-      await this.botService.sendMessageToAllEnabledGroups(messageText);
-    }
-    if (providerId) {
-      void this.botService.sendMessageToOwner(new BotMessageText(`Джерело графіка: ${providerId}`));
-    }
-  }
+    } else if (sendToGroups) {
+      if (this.powerScheduleConfigService.isScheduleSendingEnabled()) {
+        await this.botService.sendMessageToAllEnabledGroups(messageText);
 
-  private isScheduleSendingEnabled(): boolean {
-    return this.powerScheduleConfigService.getConfig().scheduleSendingEnabled ?? false;
+        const ownerMessageText = new BotMessageText()
+          .addLine(`Sent (${lastProcessed.providerId}, ${dateIso})`)
+          .newLine()
+          .merge(messageText);
+        void this.botService.sendMessageToOwner(ownerMessageText);
+      } else {
+        void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send schedule to groups, but sending is disabled (${lastProcessed.providerId}, ${dateIso})`));
+      }
+    }
   }
 }

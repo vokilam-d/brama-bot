@@ -73,13 +73,21 @@ export class PowerScheduleConfigService implements OnApplicationBootstrap {
     return this.config;
   }
 
-  /** When enabledProviderIds is missing/empty, all providers are considered enabled. */
+  isScheduleSendingEnabled(): boolean {
+    return this.config.scheduleSendingEnabled ?? false;
+  }
+
   isProviderEnabled(providerId: PowerScheduleProviderId): boolean {
     const ids = this.config.enabledProviderIds;
     if (!ids || ids.length === 0) {
-      return true;
+      return false;
     }
     return ids.includes(providerId);
+  }
+
+  async toggleScheduleSendingEnabled(): Promise<void> {
+    const current = this.config.scheduleSendingEnabled ?? true;
+    await this.updateConfig('scheduleSendingEnabled', !current);
   }
 
   async toggleProviderEnabled(providerId: PowerScheduleProviderId): Promise<void> {

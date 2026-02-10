@@ -733,28 +733,26 @@ export class BotService implements OnApplicationBootstrap {
   }
 
   private buildScheduleSettingsText(): BotMessageText {
-    const c = this.powerScheduleConfigService.getConfig();
-    const sending = (c.scheduleSendingEnabled ?? true) ? 'ON' : 'OFF';
+    const sending = this.powerScheduleConfigService.isScheduleSendingEnabled() ? 'ON' : 'OFF';
     const kd = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Kd) ? 'ON' : 'OFF';
     const dtek = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ? 'ON' : 'OFF';
     const yasno = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno) ? 'ON' : 'OFF';
-    return new BotMessageText(BotMessageText.bold('Графік: налаштування'))
+    return new BotMessageText(BotMessageText.bold('Графіки: Налаштування'))
       .newLine()
-      .addLine(`Надсилання в групи: ${sending}`)
-      .addLine(`KD: ${kd} | Dtek: ${dtek} | Yasno: ${yasno}`)
+      .addLine(`Загальне надсилання в групи: ${sending}`)
+      .addLine(`KD: ${kd} | DTEK: ${dtek} | Yasno: ${yasno}`)
       .newLine()
       .addLine('Натисніть кнопку, щоб перемкнути.');
   }
 
   private buildScheduleSettingsKeyboard(): ITelegramInlineKeyboardMarkup {
-    const c = this.powerScheduleConfigService.getConfig();
     const btn = (label: string, data: string): ITelegramInlineKeyboardButton => ({
       text: label,
       callback_data: data,
     });
-    const sending = (c.scheduleSendingEnabled ?? true) ? '✅ Надсилання' : '❌ Надсилання';
+    const sending = this.powerScheduleConfigService.isScheduleSendingEnabled() ? '✅ Загальне' : '❌ Загальне';
     const kd = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Kd) ? '✅ KD' : '❌ KD';
-    const dtek = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ? '✅ Dtek' : '❌ Dtek';
+    const dtek = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ? '✅ DTEK' : '❌ DTEK';
     const yasno = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno) ? '✅ Yasno' : '❌ Yasno';
     return {
       inline_keyboard: [
@@ -765,8 +763,11 @@ export class BotService implements OnApplicationBootstrap {
   }
 
   private async onScheduleSettingsCallback(callbackQuery: ITelegramCallbackQuery): Promise<void> {
+    this.logger.debug(`Schedule settings callback (data=${callbackQuery.data})`);
+
     const data = callbackQuery.data;
     if (!data) {
+      this.logger.debug(`Schedule settings callback: Exiting, no data (data=${callbackQuery.data})`);
       return;
     }
     const providerIdByData: Record<string, PowerScheduleProviderId> = {
@@ -776,14 +777,14 @@ export class BotService implements OnApplicationBootstrap {
     };
     try {
       if (data === 'schedule_toggle_sending') {
-        const c = this.powerScheduleConfigService.getConfig();
-        const current = c.scheduleSendingEnabled ?? true;
-        await this.powerScheduleConfigService.updateConfig('scheduleSendingEnabled', !current);
+        await this.powerScheduleConfigService.toggleScheduleSendingEnabled();
       } else if (providerIdByData[data]) {
         await this.powerScheduleConfigService.toggleProviderEnabled(providerIdByData[data]);
       } else {
+        this.logger.debug(`Schedule settings callback: Exiting, invalid data (data=${callbackQuery.data})`);
         return;
       }
+
       await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
         callback_query_id: callbackQuery.id,
       });
@@ -796,6 +797,8 @@ export class BotService implements OnApplicationBootstrap {
         parse_mode: this.textParseMode,
         reply_markup: keyboard,
       });
+
+      this.logger.debug(`Schedule settings callback: Finished (data=${callbackQuery.data})`);
     } catch (e) {
       const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
       this.logger.error(`Schedule settings callback failed: ${errorMessage}`);
