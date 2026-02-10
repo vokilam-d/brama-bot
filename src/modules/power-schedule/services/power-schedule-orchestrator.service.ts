@@ -20,10 +20,10 @@ import { getMonthName } from '../../../helpers/get-month-name.helper';
 @Injectable()
 export class PowerScheduleOrchestratorService implements OnApplicationBootstrap {
   private readonly logger = new Logger(PowerScheduleOrchestratorService.name);
+  private readonly dateMutexes = new Map<string, Promise<unknown>>();
 
   constructor(
-    @InjectModel(ProcessedScheduleInfo.name)
-    private processedScheduleInfoModel: Model<ProcessedScheduleInfo>,
+    @InjectModel(ProcessedScheduleInfo.name) private processedScheduleInfoModel: Model<ProcessedScheduleInfo>,
     private readonly botService: BotService,
     private readonly powerScheduleConfigService: PowerScheduleConfigService,
   ) {}
@@ -46,6 +46,7 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
   /**
    * Called by a provider when it detects a new or changed schedule for a date.
    * Orchestrator decides whether to send (most recent wins) and persists.
+   * Serialized per dateIso to avoid race where two providers both send before either persists.
    */
   async onScheduleChange(
     providerId: PowerScheduleProviderId,
@@ -55,9 +56,37 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     const normalizedDate = normalizeScheduleDate(date);
     const dateIso = normalizedDate.toISOString();
 
+    await this.withDateMutex(
+      dateIso,
+      () => this.handleScheduleChange(providerId, dateIso, normalizedDate, normalizedSchedule),
+    );
+  }
+
+  private async withDateMutex<T>(dateIso: string, fn: () => Promise<T>): Promise<T> {
+    const hasPrevious = this.dateMutexes.has(dateIso);
+    if (hasPrevious) {
+      this.logger.debug(`Waiting for previous onScheduleChange to finish: dateIso=${dateIso}`);
+    }
+    const prev = this.dateMutexes.get(dateIso) ?? Promise.resolve();
+    const current = prev
+      .then(() => fn())
+      .finally(() => {
+        if (this.dateMutexes.get(dateIso) === current) {
+          this.dateMutexes.delete(dateIso);
+        }
+      });
+    this.dateMutexes.set(dateIso, current);
+    return current;
+  }
+
+  private async handleScheduleChange(
+    providerId: PowerScheduleProviderId,
+    dateIso: string,
+    normalizedDate: Date,
+    normalizedSchedule: INormalizedSchedule,
+  ): Promise<void> {
     const lastProcessedDoc = await this.processedScheduleInfoModel
       .findOne({ dateIso })
-      .sort({ updatedAt: -1 })
       .exec();
     const lastProcessed = lastProcessedDoc?.toJSON();
 
@@ -69,11 +98,10 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       if (!isScheduleChanged) {
         this.logger.debug(`Schedule change ignored (not changed): dateIso=${dateIso}, providerId=${providerId}`);
 
-        const isNew = lastProcessed?.isSent;
         const skippedMessageText = new BotMessageText()
           .addLine(`Skipped (${providerId}, ${dateIso}): `)
           .newLine()
-          .addLine(BotMessageText.bold(buildScheduleTitleLine(normalizedDate, isNew)))
+          .addLine(BotMessageText.bold(buildScheduleTitleLine(normalizedDate, true)))
           .newLine()
           .merge(buildDayScheduleMessage(normalizedSchedule.hours));
         void this.botService.sendMessageToOwner(skippedMessageText);
@@ -81,19 +109,24 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       }
     }
 
-    const isNew = lastProcessed?.isSent;
+    const isNew = !!lastProcessed;
     const messageText = new BotMessageText()
       .addLine(BotMessageText.bold(buildScheduleTitleLine(normalizedDate, isNew)))
       .newLine()
       .merge(buildDayScheduleMessage(normalizedSchedule.hours));
 
-    const scheduleSendingEnabled = this.powerScheduleConfigService.getConfig().scheduleSendingEnabled ?? true;
-    if (scheduleSendingEnabled) {
+    if (this.isScheduleSendingEnabled()) {
       await this.botService.sendMessageToAllEnabledGroups(messageText);
+    } else {
+      void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send schedule, but sending is disabled (${providerId}, ${dateIso})`));
     }
-    await this.persistProcessed(providerId, dateIso, new Date(), normalizedSchedule.hours, true);
+    await this.persistProcessed(providerId, dateIso, new Date(), normalizedSchedule.hours);
 
-    void this.botService.sendMessageToOwner(new BotMessageText(`Sent (${providerId}, ${dateIso})`));
+    const ownerMessageText = new BotMessageText()
+      .addLine(`Sent (${providerId}, ${dateIso})`)
+      .newLine()
+      .merge(messageText);
+    void this.botService.sendMessageToOwner(ownerMessageText);
 
     this.logger.debug(`Schedule sent: dateIso=${dateIso}, providerId=${providerId}`);
   }
@@ -103,16 +136,14 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     dateIso: string,
     updatedAt: Date,
     scheduleItemHours: IScheduleItemHours,
-    isSent: boolean,
   ): Promise<void> {
-    const dateInfoKey: keyof ProcessedScheduleInfo = 'dateIso';
     const scheduleInfo: ProcessedScheduleInfo = {
       dateIso,
       providerId,
       updatedAt,
       scheduleItemHours,
-      isSent,
     };
+    const dateInfoKey: keyof ProcessedScheduleInfo = 'dateIso';
 
     await this.processedScheduleInfoModel.findOneAndUpdate(
       { [dateInfoKey]: dateIso },
@@ -159,14 +190,17 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       .newLine();
     messageText.merge(buildDayScheduleMessage(hours));
 
-    const scheduleSendingEnabled = this.powerScheduleConfigService.getConfig().scheduleSendingEnabled ?? true;
     if (chatId !== undefined) {
       await this.botService.sendMessage(chatId, messageText);
-    } else if (sendToGroups && scheduleSendingEnabled) {
+    } else if (sendToGroups && this.isScheduleSendingEnabled()) {
       await this.botService.sendMessageToAllEnabledGroups(messageText);
     }
     if (providerId) {
       void this.botService.sendMessageToOwner(new BotMessageText(`Джерело графіка: ${providerId}`));
     }
+  }
+
+  private isScheduleSendingEnabled(): boolean {
+    return this.powerScheduleConfigService.getConfig().scheduleSendingEnabled ?? false;
   }
 }

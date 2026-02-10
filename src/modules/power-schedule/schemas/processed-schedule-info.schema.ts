@@ -15,9 +15,6 @@ export class ProcessedScheduleInfo {
 
   @Prop({ type: ScheduleItemHoursSchema, required: true })
   scheduleItemHours: ScheduleItemHours;
-
-  @Prop({ required: true })
-  isSent: boolean;
 }
 
 export const ProcessedScheduleInfoSchema = SchemaFactory.createForClass(ProcessedScheduleInfo);
