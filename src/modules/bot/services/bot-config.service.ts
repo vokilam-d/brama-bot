@@ -1,25 +1,41 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BotConfig } from '../schemas/bot-config.schema';
-import { config } from '../../../config';
+import { CONFIG } from '../../../config';
 
 @Injectable()
-export class BotConfigService {
+export class BotConfigService implements OnApplicationBootstrap {
   private readonly logger = new Logger(BotConfigService.name);
-  private botConfig: BotConfig;
+  private botConfig!: BotConfig;
+
+  private readonly whenReadyPromise: Promise<void>;
+  private resolveReady!: () => void;
 
   constructor(
     @InjectModel(BotConfig.name) private botConfigModel: Model<BotConfig>,
-  ) {}
+  ) {
+    this.whenReadyPromise = new Promise<void>((resolve) => {
+      this.resolveReady = resolve;
+    });
+  }
 
-  async ensureAndCacheConfig(): Promise<void> {
+  /** Resolves when config is cached. Dependents should await before using getConfig. */
+  whenReady(): Promise<void> {
+    return this.whenReadyPromise;
+  }
+
+  async onApplicationBootstrap(): Promise<void> {
+    await this.ensureAndCacheConfig();
+  }
+
+  private async ensureAndCacheConfig(): Promise<void> {
     try {
       this.logger.debug(`Caching config...`);
 
       const appEnvKey: keyof BotConfig = 'appEnv';
       const configDoc = await this.botConfigModel
-        .findOne({ [appEnvKey]: config.appEnv })
+        .findOne({ [appEnvKey]: CONFIG.appEnv })
         .exec();
       this.botConfig = configDoc?.toJSON();
 
@@ -35,6 +51,8 @@ export class BotConfigService {
     } catch (e) {
       this.logger.error(`Caching config: Failed:`);
       this.logger.error(e);
+    } finally {
+      this.resolveReady();
     }
   }
 
@@ -53,7 +71,7 @@ export class BotConfigService {
     try {
       const appEnvKey: keyof BotConfig = 'appEnv';
       await this.botConfigModel.findOneAndUpdate(
-        { [appEnvKey]: config.appEnv },
+        { [appEnvKey]: CONFIG.appEnv },
         { $set: { [key]: value } },
       );
 

@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { SocksProxyAgent } from 'socks-proxy-agent';
-import { config } from '../../../config';
+import { CONFIG } from '../../../config';
 
 export enum ApiMethodName {
   SendMessage = 'sendMessage',
@@ -22,7 +22,7 @@ export enum ApiMethodName {
 export class TelegramApiService {
   private readonly logger = new Logger(TelegramApiService.name);
   private readonly apiHost = `https://api.telegram.org`;
-  private readonly token = config.botToken;
+  private readonly token = CONFIG.botToken;
   private readonly tooManyRequestsErrorCode = 429;
 
   constructor(private readonly httpService: HttpService) {}
@@ -32,10 +32,10 @@ export class TelegramApiService {
     let httpsAgent = null;
 
     this.logger.debug(`Executing method... (methodName=${methodName})`);
-    this.logger.debug({ data, hasSocks5Proxy: !!config.socks5Proxy });
+    this.logger.debug({ data, hasSocks5Proxy: !!CONFIG.socks5Proxy });
 
-    if (config.socks5Proxy) {
-      httpsAgent = new SocksProxyAgent(config.socks5Proxy);
+    if (CONFIG.socks5Proxy) {
+      httpsAgent = new SocksProxyAgent(CONFIG.socks5Proxy);
     }
 
     try {

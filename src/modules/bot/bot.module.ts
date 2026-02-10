@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { BotService } from './services/bot.service';
 import { BotController } from './controllers/bot.controller';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -8,6 +8,7 @@ import { BotSentMessage, BotSentMessageSchema } from './schemas/bot-sent-message
 import { BotIncomingMessage, BotIncomingMessageSchema } from './schemas/bot-incoming-message.schema';
 import { TelegramApiService } from './services/telegram-api.service';
 import { BotConfigService } from './services/bot-config.service';
+import { PowerScheduleModule } from '../power-schedule/power-schedule.module';
 
 @Module({
   imports: [
@@ -17,8 +18,9 @@ import { BotConfigService } from './services/bot-config.service';
       { name: BotIncomingMessage.name, schema: BotIncomingMessageSchema, collection: 'bot-incoming-messages' },
     ]),
     HttpModule,
+    forwardRef(() => PowerScheduleModule),
   ],
-  providers: [BotService, TelegramApiService, BotConfigService],
+  providers: [BotConfigService, TelegramApiService, BotService],
   controllers: [BotController],
   exports: [BotService],
 })

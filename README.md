@@ -26,6 +26,15 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Configuration
+
+Set the following environment variables (or rely on defaults) before running the app:
+
+- `DTEK_STREET` – target street for DTEK schedule lookup (default `вул. Здановської Юлії`).
+- `DTEK_BUILDING` – building identifier on DTEK site (default `71/З`).
+- `DTEK_POLL_INTERVAL_MS` – polling interval for DTEK provider in milliseconds (default 900000).
+- `DTEK_PUPPETEER_HEADLESS` – Puppeteer headless mode (`true`, `false`, or `new`; default `new`).
+
 ## Installation
 
 ```bash

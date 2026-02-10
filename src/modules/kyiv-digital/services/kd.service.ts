@@ -5,18 +5,15 @@ import { InjectModel } from '@nestjs/mongoose';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { BotService, PendingMessageType } from '../../bot/services/bot.service';
-import { config } from '../../../config';
+import { CONFIG } from '../../../config';
 import { IFeedItem, IFeedResponse } from '../interfaces/feed-response.interface';
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
 import { AxiosError, AxiosResponse } from 'axios';
 import { KdProcessedFeedItem } from '../schemas/kd-processed-feed-item.schema';
-import { KdProcessedScheduleInfo } from '../schemas/kd-processed-schedule-info.schema';
-import { IScheduleItem, IScheduleResponse, PowerState } from '../interfaces/schedule-response.interface';
+import { IScheduleItem, IScheduleResponse } from '../interfaces/schedule-response.interface';
 import { wait } from '../../../helpers/wait.function';
 import { pad } from '../../../helpers/pad.function';
 import { IDtekObjectsResponse } from '../interfaces/dtek-response.interface';
-import { getMonthName } from '../../../helpers/get-month-name.helper';
-import { getDayName } from '../../../helpers/get-day-name.helper';
 
 // login method 0 - sms, input 4 digits
 // login method 1 - incoming call, input last 3 digits of phone number
@@ -27,10 +24,12 @@ enum FeedItemIdPrefix {
 
 @Injectable()
 export class KdService implements OnApplicationBootstrap {
-
   private logger = new Logger(KdService.name);
 
-  private cachedKdConfig: KdConfig;
+  private readonly whenReadyPromise: Promise<void>;
+  private resolveReady!: () => void;
+
+  private cachedKdConfig!: KdConfig;
   private feedRequestsCounter = {
     count: 0,
     limitsLeft: new Set(),
@@ -38,30 +37,28 @@ export class KdService implements OnApplicationBootstrap {
   private cachedProcessedFeedItemIds: string[] = [];
   private isDtekObjectAvailable: boolean = true;
 
-  private readonly phoneNumber = config.phoneNumber;
+  private readonly phoneNumber = CONFIG.kyivDigital.phoneNumber;
   private readonly apiHost = `https://kyiv.digital/api`; // https://stage.kyiv.digital/api
 
   constructor(
     @InjectModel(KdConfig.name) private kdConfigModel: Model<KdConfig>,
     @InjectModel(KdProcessedFeedItem.name) private kdProcessedFeedItemModel: Model<KdProcessedFeedItem>,
-    @InjectModel(KdProcessedScheduleInfo.name) private kdProcessedScheduleInfoModel: Model<KdProcessedScheduleInfo>,
     private readonly httpService: HttpService,
     private readonly botService: BotService,
   ) {
+    this.whenReadyPromise = new Promise<void>((resolve) => {
+      this.resolveReady = resolve;
+    });
+  }
+
+  /** Resolves when config is cached and token is validated. Dependents should await before using getWeekSchedule. */
+  whenReady(): Promise<void> {
+    return this.whenReadyPromise;
   }
 
   async onApplicationBootstrap(): Promise<void> {
     this.botService.events.on(PendingMessageType.AskForCode, code => {
       this.logger.debug({ code });
-    });
-    this.botService.events.on(
-      PendingMessageType.GetSchedule,
-      (options: { day: 'today' | 'tomorrow'; chatId: number; }) => {
-        this.sendScheduleToChat(options.day, options.chatId).then();
-      },
-    );
-    this.botService.events.on(PendingMessageType.SendScheduleToAll, (options: { day: 'today' | 'tomorrow'; }) => {
-      this.sendScheduleToChat(options.day, undefined, true).then();
     });
 
     setInterval(() => {
@@ -73,7 +70,7 @@ export class KdService implements OnApplicationBootstrap {
       }
       this.feedRequestsCounter.count = 0;
       this.feedRequestsCounter.limitsLeft.clear();
-    }, config.kdFeedRequestIntervalMs * 360);
+    }, CONFIG.kyivDigital.feedRequestIntervalMs * 360);
 
     try {
       await this.ensureAndCacheConfig();
@@ -81,18 +78,15 @@ export class KdService implements OnApplicationBootstrap {
       await this.validatePersistedToken();
     } catch (e) {
       this.onError(e, `Failed to init`);
+    } finally {
+      this.resolveReady();
     }
 
-    this.logger.debug(`Dtek object id=${config.dtekObjectId}, checking it`);
+    this.logger.debug(`Dtek object id=${CONFIG.kyivDigital.dtekObjectId}, checking it`);
     this.checkDtekObject().then();
 
     this.logger.debug(`Requesting feed`);
     this.handleFeed().then();
-
-    this.logger.debug(`Requesting schedule`);
-    this.handleScheduleChanges().then();
-
-    this.logLastTwoProcessedScheduleInfos().then();
   }
 
   private async ensureAndCacheConfig(): Promise<void> {
@@ -167,7 +161,7 @@ export class KdService implements OnApplicationBootstrap {
     }
 
     if (!this.isDtekObjectAvailable) {
-      setTimeout(() => this.handleFeed(), config.kdDtekObjectsRequestIntervalMs);
+      setTimeout(() => this.handleFeed(), CONFIG.kyivDigital.dtekObjectsRequestIntervalMs);
       return;
     }
 
@@ -186,7 +180,7 @@ export class KdService implements OnApplicationBootstrap {
 
       const noAuthStatuses = [401, 403];
       if (!noAuthStatuses.includes((e as AxiosError).response?.status)) {
-        const nextRequestDelay = config.kdFeedRequestIntervalMs * 10;
+        const nextRequestDelay = CONFIG.kyivDigital.feedRequestIntervalMs * 10;
         this.logger.warn(`Re-fetching feed in "${nextRequestDelay / 1000} sec"...`);
         setTimeout(() => this.handleFeed(tryCount + 1), nextRequestDelay);
       }
@@ -199,7 +193,7 @@ export class KdService implements OnApplicationBootstrap {
     try {
       await this.processFeed(data);
 
-      let nextRequestDelay = config.kdFeedRequestIntervalMs;
+      let nextRequestDelay = CONFIG.kyivDigital.feedRequestIntervalMs;
       const rateLimitLeft = Number(headers['x-ratelimit-remaining']);
       this.feedRequestsCounter.limitsLeft.add(rateLimitLeft);
 
@@ -315,38 +309,8 @@ export class KdService implements OnApplicationBootstrap {
     await this.persistConfig();
   }
 
-  private async sendScheduleToChat(
-    day: 'today' | 'tomorrow',
-    chatId?: number,
-    sendToGroups: boolean = false,
-  ): Promise<void> {
-    const weekSchedule = await this.getWeekSchedule();
-    if (!weekSchedule) {
-      return;
-    }
-
-    const date = new Date();
-    let dayName = 'сьогодні';
-    if (day === 'tomorrow') {
-      date.setDate(date.getDate() + 1);
-      dayName = 'завтра';
-    }
-
-    const scheduleTitleWithDay = BotMessageText.bold(`🗓 Графік на ${dayName}`);
-    const messageText = new BotMessageText(`${scheduleTitleWithDay} (${date.getDate()} ${getMonthName(date)})`)
-      .newLine()
-      .newLine();
-    messageText.merge(this.buildDayScheduleMessage(weekSchedule, date));
-
-    if (chatId) {
-      await this.botService.sendMessage(chatId, messageText);
-    } else if (sendToGroups) {
-      await this.botService.sendMessageToAllEnabledGroups(messageText);
-    }
-  }
-
-  private async getWeekSchedule(tryCount: number = 1): Promise<IScheduleItem[]> {
-    const url = `${this.apiHost}/v4/dtek/${config.dtekObjectId}`;
+  async getWeekSchedule(tryCount: number = 1): Promise<IScheduleItem[] | null> {
+    const url = `${this.apiHost}/v4/dtek/${CONFIG.kyivDigital.dtekObjectId}`;
     const requestConfig = this.buildRequestConfig('get', url);
 
     let response: AxiosResponse<IScheduleResponse>;
@@ -357,16 +321,16 @@ export class KdService implements OnApplicationBootstrap {
 
       const noAuthStatuses = [401, 403];
       if (tryCount <= 3 && !noAuthStatuses.includes((e as AxiosError).response?.status)) {
-        const nextRequestDelay = config.kdFeedRequestIntervalMs * 10;
+        const nextRequestDelay = CONFIG.kyivDigital.feedRequestIntervalMs * 10;
         this.logger.warn(`Re-fetching schedule in "${nextRequestDelay / 1000} sec"...`);
         await wait(nextRequestDelay);
         return this.getWeekSchedule(tryCount + 1);
       }
 
-      return;
+      return null;
     }
 
-    return response.data.schedule;
+    return response.data.schedule ?? null;
   }
 
   private async checkDtekObject(tryCount: number = 1): Promise<void> {
@@ -375,15 +339,15 @@ export class KdService implements OnApplicationBootstrap {
 
     try {
       const response = await firstValueFrom(this.httpService.request<IDtekObjectsResponse>(requestConfig));
-      const dtekObject = response.data.objects.find(object => object.id === config.dtekObjectId);
+      const dtekObject = response.data.objects.find(object => object.id === CONFIG.kyivDigital.dtekObjectId);
       if (!dtekObject && this.isDtekObjectAvailable) {
         this.isDtekObjectAvailable = false;
-        this.logger.error(`Dtek object not found (id=${config.dtekObjectId})`);
+        this.logger.error(`Dtek object not found (id=${CONFIG.kyivDigital.dtekObjectId})`);
         this.logger.debug(response.data);
-        this.botService.sendMessageToOwner(new BotMessageText(`Dtek object not found (id=${config.dtekObjectId})`)).then();
+        this.botService.sendMessageToOwner(new BotMessageText(`Dtek object not found (id=${CONFIG.kyivDigital.dtekObjectId})`)).then();
       } else if (dtekObject && !this.isDtekObjectAvailable) {
         this.isDtekObjectAvailable = true;
-        this.logger.log(`Dtek object found (id=${config.dtekObjectId})`);
+        this.logger.log(`Dtek object found (id=${CONFIG.kyivDigital.dtekObjectId})`);
       }
 
       tryCount = 1;
@@ -393,7 +357,7 @@ export class KdService implements OnApplicationBootstrap {
       tryCount++;
     }
 
-    setTimeout(() => this.checkDtekObject(tryCount), config.kdDtekObjectsRequestIntervalMs);
+    setTimeout(() => this.checkDtekObject(tryCount), CONFIG.kyivDigital.dtekObjectsRequestIntervalMs);
   }
 
   private buildRequestConfig(method: 'get', url: string) {
@@ -460,91 +424,6 @@ export class KdService implements OnApplicationBootstrap {
     this.logger.debug(processedFeedItem);
   }
 
-  private async handleScheduleChanges(): Promise<void> {
-    const today = new Date();
-    today.setHours(6, 0, 0, 0); // set to 6 hours to avoid DST/time zone issues
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const weekSchedule = await this.getWeekSchedule();
-    if (!weekSchedule) {
-      setTimeout(() => this.handleScheduleChanges(), config.kdFeedRequestIntervalMs * 10);
-      return;
-    }
-
-    for (const date of [today, tomorrow]) {
-      const dayInKdFormat = this.buildDayInKdFormat(date);
-      const schedule = weekSchedule.find(schedule => schedule.day_of_week === dayInKdFormat);
-      if (!schedule) {
-        this.botService.sendMessageToOwner(new BotMessageText(`CRITICAL - No schedule found for date ${date.toISOString()}`)).then();
-        continue;
-      }
-
-      const processedScheduleInfoDoc = await this.kdProcessedScheduleInfoModel.findOne({ dateIso: date.toISOString() });
-      if (processedScheduleInfoDoc) {
-        const isScheduleTheSame = Object.keys(schedule.hours).every(halfHour => {
-          const currentPowerState = schedule.hours[halfHour];
-          const processedPowerState = processedScheduleInfoDoc.scheduleItemHours[halfHour];
-          return currentPowerState === processedPowerState;
-        });
-
-        if (isScheduleTheSame) {
-          continue;
-        }
-      }
-
-      const persistProcessedScheduleInfo = async (isSent: boolean): Promise<void> => {
-        if (processedScheduleInfoDoc) {
-          processedScheduleInfoDoc.isSent = isSent;
-          processedScheduleInfoDoc.scheduleItemHours = schedule.hours;
-          await processedScheduleInfoDoc.save();
-        } else {
-          const newProcessedScheduleInfo: KdProcessedScheduleInfo = {
-            dateIso: date.toISOString(),
-            scheduleItemHours: schedule.hours,
-            isSent: isSent,
-          };
-          await this.kdProcessedScheduleInfoModel.create(newProcessedScheduleInfo);
-        }
-
-        this.logger.debug(`Persisted processed schedule info (isNew=${!processedScheduleInfoDoc}, date=${date.toISOString()}, isSent=${isSent}, scheduleItemHours=${JSON.stringify(schedule.hours)})`);
-      };
-
-      const isScheduleNotSetup = Object.values(schedule.hours).some(powerState => powerState === PowerState.MaybeOff);
-      if (isScheduleNotSetup) {
-        this.logger.debug(`Schedule not setup (date=${date.toISOString()})`);
-        await persistProcessedScheduleInfo(false);
-        continue;
-      }
-
-      const scheduleTitle = processedScheduleInfoDoc?.isSent ? `Новий графік` : `Графік`;
-
-      this.logger.debug(`Schedule updated (date=${date.toISOString()}, scheduleTitle=${scheduleTitle}, hours=${JSON.stringify(schedule.hours)}, processedHours=${JSON.stringify(processedScheduleInfoDoc?.toJSON().scheduleItemHours)})`);
-
-      const messageText = new BotMessageText()
-        .addLine(BotMessageText.bold(`🗓 ${scheduleTitle} на ${date.getDate()} ${getMonthName(date)}, ${getDayName(date)}`))
-        .newLine();
-      messageText.merge(this.buildDayScheduleMessage(weekSchedule, date));
-
-      await this.botService.sendMessageToAllEnabledGroups(messageText);
-      await persistProcessedScheduleInfo(true);
-    }
-
-    setTimeout(() => this.handleScheduleChanges(), config.kdFeedRequestIntervalMs);
-  }
-
-  private async logLastTwoProcessedScheduleInfos(): Promise<void> {
-    const lastTwoProcessedScheduleInfos = await this.kdProcessedScheduleInfoModel
-      .find()
-      .sort({ dateIso: -1 })
-      .limit(2)
-      .exec();
-    this.logger.debug(`Last two processed schedule infos:`);
-    for (const processedScheduleInfo of lastTwoProcessedScheduleInfos) {
-      this.logger.debug(JSON.stringify(processedScheduleInfo.toJSON()));
-    }
-  }
-
   private buildDateByItemCreatedAt(created_at: number): Date {
     return new Date(created_at * 1000);
   }
@@ -565,99 +444,5 @@ export class KdService implements OnApplicationBootstrap {
     if (sendToOwner) {
       this.botService.sendMessageToOwner(new BotMessageText(`${description}: ${message}`)).then();
     }
-  }
-
-  private buildDayScheduleMessage(
-    weekSchedule: IScheduleItem[],
-    date: Date,
-  ): BotMessageText {
-    const dayKdFormat = this.buildDayInKdFormat(date);
-    const daySchedule = weekSchedule.find(schedule => schedule.day_of_week === dayKdFormat);
-    const halfHours = Object.keys(daySchedule.hours).sort();
-
-    const powerStatesWithRanges: {
-      powerState: PowerState;
-      ranges: { startHalfHour: string; endHalfHour?: string; }[];
-    }[] = [];
-
-    for (let i = 0; i < halfHours.length; i++) {
-      const halfHour = halfHours[i];
-      const powerState = daySchedule.hours[halfHour];
-      const lastPowerStateWithRanges = powerStatesWithRanges.at(-1);
-      const lastRange = lastPowerStateWithRanges?.ranges.at(-1);
-      const isLastRangeEnded = Boolean(lastRange?.endHalfHour);
-
-      const handleOffPowerState = (powerState: PowerState) => {
-        if (!lastPowerStateWithRanges) {
-          powerStatesWithRanges.push({ powerState: powerState, ranges: [{ startHalfHour: halfHour }] });
-        } else if (lastPowerStateWithRanges.powerState !== powerState) {
-          if (lastRange && !isLastRangeEnded) {
-            lastRange.endHalfHour = halfHour;
-          }
-
-          powerStatesWithRanges.push({ powerState: powerState, ranges: [{ startHalfHour: halfHour }] });
-        } else if (isLastRangeEnded) {
-          lastPowerStateWithRanges.ranges.push({ startHalfHour: halfHour });
-        }
-      };
-
-      if (powerState === PowerState.On) {
-        if (lastRange && !isLastRangeEnded) {
-          lastRange.endHalfHour = halfHour;
-        }
-      } else if (powerState === PowerState.Off || powerState === PowerState.MaybeOff) {
-        handleOffPowerState(powerState);
-      }
-    }
-
-    const messageText = new BotMessageText();
-
-    if (powerStatesWithRanges.length === 0) {
-      messageText.addLine(`Світло буде весь день`);
-      return messageText;
-    }
-
-    const lastRange = powerStatesWithRanges.at(-1).ranges.at(-1);
-    if (!lastRange.endHalfHour) {
-      lastRange.endHalfHour = 'h00_0';
-    }
-
-    const buildReadableHalfHour = (halfHourStr: string): string => {
-      const match = halfHourStr.match(/^h(\d{2})_([01])$/);
-
-      if (!match) {
-        return halfHourStr;
-      }
-
-      const hour = match[1];
-      const halfHourIndex = match[2];
-      const halfHour = halfHourIndex === '1' ? '30' : '00';
-
-      return `${hour}:${halfHour}`;
-    };
-
-    for (const powerStateWithRanges of powerStatesWithRanges) {
-      if (powerStateWithRanges.powerState === PowerState.Off) {
-        messageText.addLine(`Світло буде відсутнє:`);
-      } else if (powerStateWithRanges.powerState === PowerState.MaybeOff) {
-        messageText.addLine(`Можливе відключення:`);
-      }
-
-      for (const range of powerStateWithRanges.ranges) {
-        const start = buildReadableHalfHour(range.startHalfHour);
-        const end = buildReadableHalfHour(range.endHalfHour);
-        messageText.addLine(`з ${start} до ${end}`);
-      }
-    }
-
-    return messageText;
-  }
-
-  private buildDayInKdFormat(date: Date): number {
-    let day = date.getDay();
-    if (day === 0) { // force to KD indexes, where Sunday is 7, not 0 (like in JS Date)
-      day = 7;
-    }
-    return day;
   }
 }
