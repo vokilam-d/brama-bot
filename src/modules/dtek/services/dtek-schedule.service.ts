@@ -18,6 +18,8 @@ import {
   isAllPowerOn,
   normalizeDtekDaySlots,
 } from '../helpers/dtek-normalize.helper';
+import { LaunchOptions } from 'puppeteer';
+import { isInDocker } from '../../../helpers/is-in-docker';
 
 type DisconSchedule = {
   form: {
@@ -238,6 +240,20 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
   private async fetchDtekPagePayload(): Promise<DtekFetchResult | null> {
     puppeteer.use(StealthPlugin());
 
+    const launchOptions: LaunchOptions = {
+      headless: true,
+      args: [
+        '--disable-dev-shm-usage',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-gpu',
+        '--no-zygote',
+      ],
+    };
+    if (isInDocker()) {
+      launchOptions.executablePath = 'google-chrome-stable';
+      launchOptions.args.push('--single-process');
+    }
     const browser = await puppeteer.launch({
       headless: true,
     });
