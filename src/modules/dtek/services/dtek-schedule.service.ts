@@ -238,8 +238,19 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
   private async fetchDtekPagePayload(): Promise<DtekFetchResult | null> {
     puppeteer.use(StealthPlugin());
 
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+
     const browser = await puppeteer.launch({
       headless: true,
+      executablePath: executablePath || undefined, // Use installed Chromium in Docker, bundled locally
+      args: [
+        '--disable-dev-shm-usage',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-gpu',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-features=IsolateOrigins,site-per-process',
+      ],
     });
 
     try {
