@@ -67,9 +67,16 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
         return currentPowerState !== processedPowerState;
       });
       if (!isScheduleChanged) {
-        this.logger.debug(
-          `Schedule change ignored (not changed): dateIso=${dateIso}, providerId=${providerId}`,
-        );
+        this.logger.debug(`Schedule change ignored (not changed): dateIso=${dateIso}, providerId=${providerId}`);
+
+        const isNew = lastProcessed?.isSent;
+        const skippedMessageText = new BotMessageText()
+          .addLine(`Skipped (${providerId}, ${dateIso}): `)
+          .newLine()
+          .addLine(BotMessageText.bold(buildScheduleTitleLine(normalizedDate, isNew)))
+          .newLine()
+          .merge(buildDayScheduleMessage(normalizedSchedule.hours));
+        void this.botService.sendMessageToOwner(skippedMessageText);
         return;
       }
     }
@@ -77,16 +84,16 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     const isNew = lastProcessed?.isSent;
     const messageText = new BotMessageText()
       .addLine(BotMessageText.bold(buildScheduleTitleLine(normalizedDate, isNew)))
-      .newLine();
-    messageText.merge(buildDayScheduleMessage(normalizedSchedule.hours));
-
-    messageText.newLine().addLine(`Джерело графіка: ${providerId}`);
+      .newLine()
+      .merge(buildDayScheduleMessage(normalizedSchedule.hours));
 
     const scheduleSendingEnabled = this.powerScheduleConfigService.getConfig().scheduleSendingEnabled ?? true;
     if (scheduleSendingEnabled) {
       await this.botService.sendMessageToAllEnabledGroups(messageText);
     }
     await this.persistProcessed(providerId, dateIso, new Date(), normalizedSchedule.hours, true);
+
+    void this.botService.sendMessageToOwner(new BotMessageText(`Sent (${providerId}, ${dateIso})`));
 
     this.logger.debug(`Schedule sent: dateIso=${dateIso}, providerId=${providerId}`);
   }
