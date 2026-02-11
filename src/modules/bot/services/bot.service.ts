@@ -35,10 +35,7 @@ export enum PendingMessageType {
 }
 
 enum AdminBotCommand {
-  Enable = '/enable',
-  Disable = '/disable',
-  Status = '/status',
-  SetGroupStatus = '/set_group_status',
+  GroupsSettings = '/groups_settings',
   SendScheduleTodayToAll = '/send_schedule_today_to_all',
   SendScheduleTomorrowToAll = '/send_schedule_tomorrow_to_all',
   GetScheduleToday = '/get_schedule_today',
@@ -76,9 +73,9 @@ export class BotService implements OnApplicationBootstrap {
   }
 
   async onApplicationBootstrap(): Promise<void> {
-    // this.setWebhook();
-
     await this.botConfigService.whenReady();
+
+    // this.setWebhook();
 
     const botConfig = this.botConfigService.getConfig();
     if (!botConfig.ownerIds[0]) {
@@ -108,6 +105,9 @@ export class BotService implements OnApplicationBootstrap {
     const isOwner = botConfig.ownerIds.includes(callbackQuery.from.id);
     if (isOwner && callbackQuery.data?.startsWith('schedule_')) {
       await this.onScheduleSettingsCallback(callbackQuery);
+    }
+    if (isOwner && callbackQuery.data?.startsWith('group_')) {
+      await this.onGroupSettingsCallback(callbackQuery);
     }
   }
 
@@ -284,57 +284,12 @@ export class BotService implements OnApplicationBootstrap {
     try {
       const [command, ...args] = message.text.split(' ');
       switch (command) {
-        case AdminBotCommand.Enable:
-          try {
-            await this.botConfigService.updateConfig('isEnabled', true);
-            await this.likeMessage(chatId, message.message_id);
-          } catch (e) {
-            const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
-            await this.sendMessage(chatId, new BotMessageText(`Failed to enable bot: ${errorMessage}`));
-          }
+        case AdminBotCommand.GroupsSettings: {
+          const groupsText = this.buildGroupsSettingsText();
+          const groupsKeyboard = this.buildGroupsSettingsKeyboard();
+          await this.sendMessage(chatId, groupsText, { replyMarkup: groupsKeyboard });
           break;
-
-        case AdminBotCommand.Disable:
-          try {
-            await this.botConfigService.updateConfig('isEnabled', false);
-            await this.likeMessage(chatId, message.message_id);
-          } catch (e) {
-            const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
-            await this.sendMessage(chatId, new BotMessageText(`Failed to disable bot: ${errorMessage}`));
-          }
-          break;
-
-        case AdminBotCommand.Status:
-          await this.sendMessage(chatId, this.buildStatusText());
-          break;
-
-        case AdminBotCommand.SetGroupStatus:
-          const groupId = parseInt(args[0]);
-          const status = args[1];
-          const botConfig = this.botConfigService.getConfig();
-
-          const groupIndex = botConfig.groups.findIndex(group => group.id === groupId);
-          if (groupIndex === -1) {
-            await this.sendMessage(chatId, new BotMessageText(`Group not found (id=${groupId})`));
-            return;
-          }
-
-          if (status !== 'enabled' && status !== 'disabled') {
-            await this.sendMessage(chatId, new BotMessageText(`Invalid status: ${status}. Valid statuses: enabled, disabled`));
-            return;
-          }
-
-          botConfig.groups[groupIndex].isEnabled = status === 'enabled';
-
-          try {
-            await this.botConfigService.updateConfig('groups', botConfig.groups);
-            await this.likeMessage(chatId, message.message_id);
-            await this.sendMessage(chatId, this.buildStatusText());
-          } catch (e) {
-            const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
-            await this.sendMessage(chatId, new BotMessageText(`Failed to update group status: ${errorMessage}`));
-          }
-          break;
+        }
 
         case AdminBotCommand.GetScheduleToday: {
           this.events.emit(PendingMessageType.GetSchedule, { day: 'today', chatId });
@@ -669,7 +624,7 @@ export class BotService implements OnApplicationBootstrap {
   }
 
   private async setWebhook(): Promise<void> {
-    const websiteOrigin = `https://64b5-193-194-107-76.ngrok-free.app`;
+    const websiteOrigin = `https://xnmjn8h3-3500.euw.devtunnels.ms`;
     // const websiteOrigin = `https://klondike.com.ua`;
 
     const webhookUrl = `${websiteOrigin}/brama-bot/api/v1/bot/tg-webhook`;
@@ -809,22 +764,96 @@ export class BotService implements OnApplicationBootstrap {
     }
   }
 
-  private buildStatusText(): BotMessageText {
+  private buildGroupsSettingsText(): BotMessageText {
     const botConfig = this.botConfigService.getConfig();
-    const text = new BotMessageText(`Status: ${BotMessageText.bold(botConfig.isEnabled ? 'enabled' : 'disabled')}`)
-      .newLine();
-
-    text.addLine(`Owner IDs: ${botConfig.ownerIds.map(id => BotMessageText.bold(id)).join(', ')}`)
-      .newLine();
-
-    text.addLine(`Groups:`)
+    const botStatus = botConfig.isEnabled ? '✅' : '❌';
+    const text = new BotMessageText()
+      .addLine(BotMessageText.bold('Групи: Налаштування'))
+      .newLine()
+      .addLine(`${botStatus} Глобальна відправка: ${botConfig.isEnabled ? 'увімкнено' : 'вимкнено'}`)
+      .newLine()
+      .addLine(`Owner IDs: ${botConfig.ownerIds.map((id) => BotMessageText.bold(id)).join(', ')}`)
+      .newLine()
+      .addLine('Groups:');
     for (let i = 0; i < botConfig.groups.length; i++) {
       const group = botConfig.groups[i];
-      const status = group.isEnabled ? 'enabled' : 'disabled';
+      const status = group.isEnabled ? '✅' : '❌';
       const threadId = group.threadId ? ` (threadId=${group.threadId})` : '';
-      text.addLine(` ${i + 1}. ${BotMessageText.bold(group.id)}${threadId} - ${BotMessageText.bold(status)}: "${group.comment}"`);
+      text.addLine(` ${i + 1}. ${status} ${BotMessageText.bold(group.id)}${threadId}: "${group.comment}"`);
     }
-
+    text.newLine().addLine('Натисніть кнопку з номером, щоб перемкнути групу.');
     return text;
   }
+
+  private buildGroupsSettingsKeyboard(): ITelegramInlineKeyboardMarkup {
+    const btn = (label: string, data: string): ITelegramInlineKeyboardButton => ({
+      text: label,
+      callback_data: data,
+    });
+    const botConfig = this.botConfigService.getConfig();
+    const botLabel = botConfig.isEnabled ? '✅ Глобальна відправка увімкнена' : '❌ Глобальна відправка вимкнена';
+    const groupButtons = botConfig.groups.map((group, index) => {
+      const status = group.isEnabled ? '✅' : '❌';
+      return btn(`${status} ${index + 1}`, `group_toggle_${group.id}`);
+    });
+    const groupRows: ITelegramInlineKeyboardButton[][] = [];
+    const buttonsInRowCount: number = 3;
+    for (let i = 0; i < groupButtons.length; i += buttonsInRowCount) {
+      groupRows.push(groupButtons.slice(i, i + buttonsInRowCount));
+    }
+    return {
+      inline_keyboard: [[btn(botLabel, 'group_toggle_bot')], ...groupRows],
+    };
+  }
+
+  private async onGroupSettingsCallback(callbackQuery: ITelegramCallbackQuery): Promise<void> {
+    this.logger.debug(`Group settings callback (data=${callbackQuery.data})`);
+
+    const data = callbackQuery.data;
+    if (!data?.startsWith('group_toggle_')) {
+      this.logger.debug(`Group settings callback: Exiting, invalid data (data=${callbackQuery.data})`);
+      return;
+    }
+
+    const botConfig = this.botConfigService.getConfig();
+
+    try {
+      if (data === 'group_toggle_bot') {
+        await this.botConfigService.updateConfig('isEnabled', !botConfig.isEnabled);
+      } else {
+        const groupId = parseInt(data.replace('group_toggle_', ''), 10);
+        const groupIndex = botConfig.groups.findIndex((g) => g.id === groupId);
+        if (groupIndex === -1) {
+          await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
+            callback_query_id: callbackQuery.id,
+            text: 'Group not found',
+          });
+          return;
+        }
+        botConfig.groups[groupIndex].isEnabled = !botConfig.groups[groupIndex].isEnabled;
+        await this.botConfigService.updateConfig('groups', botConfig.groups);
+      }
+
+      await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
+        callback_query_id: callbackQuery.id,
+      });
+      const text = this.buildGroupsSettingsText();
+      const keyboard = this.buildGroupsSettingsKeyboard();
+      await this.telegramApiService.execMethod(ApiMethodName.EditMessageText, {
+        chat_id: callbackQuery.message.chat.id,
+        message_id: callbackQuery.message.message_id,
+        text: text.toString(),
+        parse_mode: this.textParseMode,
+        reply_markup: keyboard,
+      });
+    } catch (e) {
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
+      this.logger.error(`Group settings callback failed: ${errorMessage}`);
+      await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
+        callback_query_id: callbackQuery.id,
+        text: errorMessage,
+      });
+    }
+  }
+
 }
