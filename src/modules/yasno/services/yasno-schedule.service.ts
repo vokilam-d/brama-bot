@@ -88,7 +88,7 @@ export class YasnoScheduleService implements IPowerScheduleProvider, OnApplicati
   }
 
   private applyScheduleProviderEnabled(): void {
-    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno) ?? true;
+    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno);
     if (enabled && !this.pollTimer) {
       this.logger.debug(`Yasno provider enabled, starting schedule polling`);
 
@@ -116,7 +116,7 @@ export class YasnoScheduleService implements IPowerScheduleProvider, OnApplicati
   }
 
   private async schedulePollAndNotify(): Promise<void> {
-    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno) ?? true;
+    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno);
     if (!enabled) {
       return;
     }

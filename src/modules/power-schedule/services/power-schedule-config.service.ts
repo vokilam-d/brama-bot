@@ -69,10 +69,6 @@ export class PowerScheduleConfigService implements OnApplicationBootstrap {
     }
   }
 
-  getConfig(): PowerScheduleConfig {
-    return this.config;
-  }
-
   isScheduleSendingEnabled(): boolean {
     return this.config.scheduleSendingEnabled ?? false;
   }

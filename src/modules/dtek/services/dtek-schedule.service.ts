@@ -1,6 +1,4 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { CONFIG } from '../../../config';
 import {
   INormalizedSchedule,
@@ -13,6 +11,7 @@ import { normalizeScheduleDate } from '../../power-schedule/helpers/normalize-sc
 import { BotService } from '../../bot/services/bot.service';
 import { PowerScheduleConfigService } from '../../power-schedule/services/power-schedule-config.service';
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
+import { PuppeteerService } from '../../puppeteer/services/puppeteer.service';
 import {
   DtekSlotValue,
   isAllPowerOn,
@@ -94,6 +93,7 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
     private readonly powerScheduleOrchestrator: PowerScheduleOrchestratorService,
     private readonly botService: BotService,
     private readonly powerScheduleConfigService: PowerScheduleConfigService,
+    private readonly puppeteerService: PuppeteerService,
   ) {}
 
   getId(): string {
@@ -116,7 +116,7 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
   }
 
   private applyScheduleProviderEnabled(): void {
-    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ?? true;
+    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek);
     if (enabled && !this.pollTimer) {
       this.logger.debug(`DTEK provider enabled, starting schedule polling`);
 
@@ -146,7 +146,7 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
   }
 
   private async schedulePollAndNotify(): Promise<void> {
-    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ?? true;
+    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek);
     if (!enabled) {
       return;
     }
@@ -240,25 +240,7 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
   }
 
   private async fetchDtekPagePayload(): Promise<DtekFetchResult | null> {
-    puppeteer.use(StealthPlugin());
-
-    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-
-    const browser = await puppeteer.launch({
-      headless: true,
-      executablePath: executablePath || undefined, // Use installed Chromium in Docker, bundled locally
-      args: [
-        '--disable-dev-shm-usage',
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-gpu',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-features=IsolateOrigins,site-per-process',
-      ],
-    });
-
-    try {
-      const page = await browser.newPage();
+    return this.puppeteerService.executeWithPage(async (page) => {
       await page.setViewport({ width: 1920, height: 1080 });
       await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
@@ -278,28 +260,19 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
       const payload = await page.evaluate(
         ({ street }) => {
           return new Promise((resolve, reject) => {
-            // DisconSchedule is a top-level `let`, not on window; use indirect eval to read from global scope
             const ds: DisconSchedule = (0, eval)('typeof DisconSchedule !== "undefined" ? DisconSchedule : null');
             if (!ds) {
               reject(new Error(`DisconSchedule is not available (html=${document.documentElement.outerHTML})`));
               return;
             }
-
             if (!ds?.ajax?.url) {
               reject(new Error(`DisconSchedule.ajax not available. (ds=${JSON.stringify(ds)})`));
               return;
             }
-
             ds.ajax.obj.method = 'getHomeNum';
             ds.ajax.obj.data = [
-              {
-                "name": "street",
-                "value": street
-              },
-              {
-                "name": "updateFact",
-                "value": ds.fact?.update
-              }
+              { name: 'street', value: street },
+              { name: 'updateFact', value: ds.fact?.update },
             ];
             ds.ajax.send(
               (answer) => resolve({
@@ -314,9 +287,7 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
       );
 
       return payload as DtekFetchResult | null;
-    } finally {
-      await browser.close();
-    }
+    });
   }
 
   private dateFromTimestamp(timestamp: string): Date {

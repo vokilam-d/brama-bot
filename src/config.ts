@@ -37,4 +37,5 @@ export const CONFIG = {
     building: process.env.YASNO_BUILDING,
     pollIntervalMs: resolveEnvNumber(process.env.YASNO_POLL_INTERVAL_MS, defaultPollIntervalMs),
   },
+  puppeteerExecutablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
 };
