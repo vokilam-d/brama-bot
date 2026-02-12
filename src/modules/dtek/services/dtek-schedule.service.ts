@@ -1,16 +1,14 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { CONFIG } from '../../../config';
+import { BotService } from '../../bot/services/bot.service';
+import { BasePowerScheduleProvider } from '../../power-schedule/base/base-power-schedule-provider';
+import { normalizeScheduleDate } from '../../power-schedule/helpers/normalize-schedule-date.helper';
 import {
   INormalizedSchedule,
-  IScheduleItemHours,
-  PowerScheduleProviderId,
+  PowerScheduleProviderId
 } from '../../power-schedule/interfaces/schedule.interface';
-import { IPowerScheduleProvider } from '../../power-schedule/interfaces/power-schedule-provider.interface';
-import { PowerScheduleOrchestratorService } from '../../power-schedule/services/power-schedule-orchestrator.service';
-import { normalizeScheduleDate } from '../../power-schedule/helpers/normalize-schedule-date.helper';
-import { BotService } from '../../bot/services/bot.service';
 import { PowerScheduleConfigService } from '../../power-schedule/services/power-schedule-config.service';
-import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
+import { PowerScheduleOrchestratorService } from '../../power-schedule/services/power-schedule-orchestrator.service';
 import { PuppeteerService } from '../../puppeteer/services/puppeteer.service';
 import {
   DtekSlotValue,
@@ -80,122 +78,30 @@ interface DtekFetchResult {
 const INCAPSULA_WAIT_MS = 4000;
 
 @Injectable()
-export class DtekScheduleService implements IPowerScheduleProvider, OnApplicationBootstrap, OnModuleDestroy {
-  private readonly logger = new Logger(DtekScheduleService.name);
-  private readonly pollIntervalMs = CONFIG.dtek.pollIntervalMs;
+export class DtekScheduleService
+  extends BasePowerScheduleProvider
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
+  protected readonly logger = new Logger(DtekScheduleService.name);
+  protected readonly pollIntervalMs = CONFIG.dtek.pollIntervalMs;
+  protected readonly providerId = PowerScheduleProviderId.Dtek;
   private readonly street = CONFIG.dtek.street;
   private readonly building = CONFIG.dtek.building;
 
-  private pollTimer?: NodeJS.Timeout;
-  private readonly lastScheduleHashes = new Map<string, string>();
-
   constructor(
-    private readonly powerScheduleOrchestrator: PowerScheduleOrchestratorService,
-    private readonly botService: BotService,
-    private readonly powerScheduleConfigService: PowerScheduleConfigService,
+    powerScheduleOrchestrator: PowerScheduleOrchestratorService,
+    botService: BotService,
+    powerScheduleConfigService: PowerScheduleConfigService,
     private readonly puppeteerService: PuppeteerService,
-  ) {}
-
-  getId(): string {
-    return PowerScheduleProviderId.Dtek;
+  ) {
+    super(powerScheduleOrchestrator, botService, powerScheduleConfigService);
   }
 
-  async onApplicationBootstrap(): Promise<void> {
-    if (!this.pollIntervalMs) {
-      this.logger.warn(`DTEK polling disabled (interval is falsy)`);
-      return;
-    }
-    this.powerScheduleConfigService.events.on('configUpdated', () => this.applyScheduleProviderEnabled());
-    this.applyScheduleProviderEnabled();
+  protected override shouldSkipSchedule(schedule: INormalizedSchedule): boolean {
+    return isAllPowerOn(schedule.hours);
   }
 
-  onModuleDestroy(): void {
-    if (this.pollTimer) {
-      clearTimeout(this.pollTimer);
-    }
-  }
-
-  private applyScheduleProviderEnabled(): void {
-    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek);
-    if (enabled && !this.pollTimer) {
-      this.logger.debug(`DTEK provider enabled, starting schedule polling`);
-
-      void this.schedulePollAndNotify();
-    } else if (!enabled && this.pollTimer) {
-      this.logger.debug(`DTEK provider disabled, stopping schedule polling`);
-
-      clearTimeout(this.pollTimer);
-      this.pollTimer = undefined;
-    }
-  }
-
-  async getScheduleForDate(date: Date): Promise<INormalizedSchedule | null> {
-    try {
-      const schedules = await this.fetchSchedules();
-      const targetIso = normalizeScheduleDate(date).toISOString();
-
-      const match = schedules.find((schedule) => {
-        return normalizeScheduleDate(schedule.date).toISOString() === targetIso;
-      });
-
-      return match ?? null;
-    } catch (error) {
-      this.onError(error as Error, 'DTEK: getScheduleForDate failed');
-      return null;
-    }
-  }
-
-  private async schedulePollAndNotify(): Promise<void> {
-    const enabled = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek);
-    if (!enabled) {
-      return;
-    }
-    await this.pollAndNotify();
-    this.pollTimer = setTimeout(() => this.schedulePollAndNotify(), this.pollIntervalMs);
-  }
-
-  private async pollAndNotify(): Promise<void> {
-    try {
-      const schedules = await this.fetchSchedules();
-      for (const schedule of schedules) {
-        const dateIso = normalizeScheduleDate(schedule.date).toISOString();
-        if (isAllPowerOn(schedule.hours)) {
-          this.lastScheduleHashes.delete(dateIso);
-          continue;
-        }
-
-        const hash = this.hashSchedule(schedule.hours);
-        if (this.lastScheduleHashes.get(dateIso) === hash) {
-          continue;
-        }
-
-        try {
-          this.logger.debug(`Sending DTEK schedule for ${dateIso}`);
-          await this.powerScheduleOrchestrator.onScheduleChange(
-            PowerScheduleProviderId.Dtek,
-            schedule.date,
-            schedule,
-          );
-          this.lastScheduleHashes.set(dateIso, hash);
-        } catch (error) {
-          this.onError(
-            error as Error,
-            `DTEK: Failed to notify orchestrator for ${dateIso}`,
-          );
-        }
-      }
-    } catch (error) {
-      this.onError(error as Error, 'DTEK: Failed to fetch schedule');
-    }
-  }
-
-  private onError(error: Error, description: string): void {
-    const message = error.stack ?? error.message ?? String(error);
-    this.logger.error(`${description}: ${message}`);
-    void this.botService.sendMessageToOwner(new BotMessageText(`${description}: ${message}`));
-  }
-
-  private async fetchSchedules(): Promise<INormalizedSchedule[]> {
+  override async fetchSchedules(): Promise<INormalizedSchedule[]> {
     const payload = await this.fetchDtekPagePayload();
     if (!payload) {
       return [];
@@ -242,10 +148,7 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
   private async fetchDtekPagePayload(): Promise<DtekFetchResult | null> {
     return this.puppeteerService.executeWithPage(async (page) => {
       await page.setViewport({ width: 1920, height: 1080 });
-      await page.setUserAgent(
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-          '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-      );
+      await page.setUserAgent(`Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36`);
       await page.setExtraHTTPHeaders({
         'Accept-Language': 'uk-UA,uk;q=0.9,en;q=0.8',
       });
@@ -260,6 +163,7 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
       const payload = await page.evaluate(
         ({ street }) => {
           return new Promise((resolve, reject) => {
+            // Indirect eval, since variables declared with `let`/`const` are not accessible any other way
             const ds: DisconSchedule = (0, eval)('typeof DisconSchedule !== "undefined" ? DisconSchedule : null');
             if (!ds) {
               reject(new Error(`DisconSchedule is not available (html=${document.documentElement.outerHTML})`));
@@ -297,9 +201,5 @@ export class DtekScheduleService implements IPowerScheduleProvider, OnApplicatio
     }
 
     return normalizeScheduleDate(new Date(numeric * 1000));
-  }
-
-  private hashSchedule(hours: IScheduleItemHours): string {
-    return JSON.stringify(hours);
   }
 }

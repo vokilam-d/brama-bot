@@ -83,7 +83,7 @@ export class BotService implements OnApplicationBootstrap {
     }
 
     // const text = `🗓 <b>Новий графік на сьогодні</b>\n\nСвітло буде відсутнє:\nз 06:00 до 12:30\nз 15:30 до 20:00`
-    // this.telegramApiService.execMethod('editMessageText' as any, { chat_id: -1002164849966, message_id: 378, text: text, parse_mode: 'HTML' });
+    // this.telegramApiService.execMethod('editMessageText' as any, { chat_id: -0, message_id: 378, text: text, parse_mode: 'HTML' });
   }
 
   async onNewTelegramUpdate(update: ITelegramUpdate): Promise<void> {
