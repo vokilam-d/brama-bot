@@ -124,7 +124,7 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
         .merge(messageText);
       void this.botService.sendMessageToOwner(ownerMessageText);
     } else {
-      void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send schedule, but sending is disabled (${providerId}, ${dateIso})`));
+      void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send schedule, but sending is disabled (${providerId}, ${dateIso}) text:\n\n${messageText.toString()}`));
     }
     await this.persistProcessed(providerId, dateIso, new Date(), normalizedSchedule.hours);
 
@@ -201,7 +201,7 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
           .merge(messageText);
         void this.botService.sendMessageToOwner(ownerMessageText);
       } else {
-        void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send schedule to groups, but sending is disabled (${lastProcessed.providerId}, ${dateIso})`));
+        void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send schedule to groups, but sending is disabled (${lastProcessed.providerId}, ${dateIso}) text:\n\n${messageText.toString()}`));
       }
     }
   }
