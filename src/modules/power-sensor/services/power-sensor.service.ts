@@ -74,9 +74,12 @@ export class PowerSensorService implements OnApplicationBootstrap {
       if (lastStatus.hasPower !== null && lastStatus.timestampIso) {
         const lastTimestamp = new Date(lastStatus.timestampIso);
         const durationMs = timestamp.getTime() - lastTimestamp.getTime();
-        const durationText = this.formatDuration(durationMs);
-        const durationLabel = newHasPower ? 'Без світла були' : 'Зі світлом були';
-        messageText.newLine().addLine(`${durationLabel} ${durationText}`);
+        const powerWasOnForOver24h = lastStatus.hasPower && durationMs > 24 * 60 * 60 * 1000;
+        if (!powerWasOnForOver24h) {
+          const durationText = this.formatDuration(durationMs);
+          const durationLabel = newHasPower ? 'Без світла були' : 'Зі світлом були';
+          messageText.newLine().addLine(`${durationLabel} ${durationText}`);
+        }
       }
 
       await this.botService.sendMessageToPowerStatusGroup(
