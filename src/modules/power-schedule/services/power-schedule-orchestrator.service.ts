@@ -15,7 +15,7 @@ import {
   buildScheduleTitleLine,
 } from '../helpers/schedule-message.helper';
 import { normalizeScheduleDate } from '../helpers/normalize-schedule-date.helper';
-import { getMonthName } from '../../../helpers/get-month-name.helper';
+
 
 @Injectable()
 export class PowerScheduleOrchestratorService implements OnApplicationBootstrap {
@@ -160,10 +160,8 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     this.logger.debug(`Sending schedule to chat... (day=${day}, chatId=${chatId}, sendToGroups=${sendToGroups})`);
 
     const date = normalizeScheduleDate(new Date());
-    let dayName = 'сьогодні';
     if (day === 'tomorrow') {
       date.setDate(date.getDate() + 1);
-      dayName = 'завтра';
     }
     const dateIso = date.toISOString();
 
@@ -180,14 +178,11 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       return;
     }
 
-    const scheduleTitleWithDay = BotMessageText.bold(
-      `🗓 Графік на ${dayName} (${date.getDate()} ${getMonthName(date)})`,
-    );
+    const isNew = !!lastProcessed;
     const messageText = new BotMessageText()
-      .add(scheduleTitleWithDay)
+      .addLine(BotMessageText.bold(buildScheduleTitleLine(date, isNew)))
       .newLine()
-      .newLine();
-    messageText.merge(buildDayScheduleMessage(lastProcessed.scheduleItemHours));
+      .merge(buildDayScheduleMessage(lastProcessed.scheduleItemHours));
 
     if (chatId !== undefined) {
       await this.botService.sendMessage(chatId, messageText);
