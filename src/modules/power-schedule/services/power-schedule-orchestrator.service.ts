@@ -16,11 +16,13 @@ import {
 } from '../helpers/schedule-message.helper';
 import { normalizeScheduleDate } from '../helpers/normalize-schedule-date.helper';
 
+const SEND_TO_GROUPS_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
 @Injectable()
 export class PowerScheduleOrchestratorService implements OnApplicationBootstrap {
   private readonly logger = new Logger(PowerScheduleOrchestratorService.name);
   private readonly dateMutexes = new Map<string, Promise<unknown>>();
+  private readonly lastSentToGroupsAtByDate = new Map<string, Date>();
 
   constructor(
     @InjectModel(ProcessedScheduleInfo.name) private processedScheduleInfoModel: Model<ProcessedScheduleInfo>,
@@ -85,50 +87,84 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     normalizedDate: Date,
     normalizedSchedule: INormalizedSchedule,
   ): Promise<void> {
-    const lastProcessed: ProcessedScheduleInfo = await this.processedScheduleInfoModel
-      .findOne({ dateIso })
-      .lean()
-      .exec();
+    const lastProcessed = await this.processedScheduleInfoModel.findOne({ dateIso }).lean().exec();
 
     if (lastProcessed) {
       const isScheduleChanged = Object.entries(lastProcessed.scheduleItemHours).some(([halfHour, processedPowerState]) => {
-        const currentPowerState = normalizedSchedule.hours[halfHour];
-        return currentPowerState !== processedPowerState;
+        return normalizedSchedule.hours[halfHour] !== processedPowerState;
       });
       if (!isScheduleChanged) {
-        this.logger.debug(`Schedule change ignored (not changed): dateIso=${dateIso}, providerId=${providerId}`);
-
-        const skippedMessageText = new BotMessageText()
-          .addLine(`Skipped (${providerId}, ${dateIso}): `)
-          .newLine()
-          .addLine(BotMessageText.bold(buildScheduleTitleLine(normalizedDate, true)))
-          .newLine()
-          .merge(buildDayScheduleMessage(normalizedSchedule.hours));
-        void this.botService.sendMessageToOwner(skippedMessageText);
+        await this.handleUnchangedSchedule(providerId, dateIso, normalizedDate, normalizedSchedule);
         return;
       }
     }
 
-    const isNew = !!lastProcessed;
+    const messageText = this.buildScheduleMessageText(normalizedDate, !lastProcessed, normalizedSchedule.hours);
+    await this.deliverScheduleToGroups(providerId, dateIso, messageText, normalizedSchedule.hours);
+    this.logger.debug(`Schedule sent: dateIso=${dateIso}, providerId=${providerId}`);
+  }
+
+  private async handleUnchangedSchedule(
+    providerId: PowerScheduleProviderId,
+    dateIso: string,
+    normalizedDate: Date,
+    normalizedSchedule: INormalizedSchedule,
+  ): Promise<void> {
+    this.logger.debug(`Schedule change ignored (not changed): dateIso=${dateIso}, providerId=${providerId}`);
     const messageText = new BotMessageText()
+      .addLine(`Skipped (${providerId}, ${dateIso}): `)
+      .newLine()
+      .merge(this.buildScheduleMessageText(normalizedDate, true, normalizedSchedule.hours))
+    void this.botService.sendMessageToOwner(messageText);
+  }
+
+  private buildScheduleMessageText(
+    normalizedDate: Date,
+    isNew: boolean,
+    scheduleItemHours: IScheduleItemHours,
+  ): BotMessageText {
+    return new BotMessageText()
       .addLine(BotMessageText.bold(buildScheduleTitleLine(normalizedDate, isNew)))
       .newLine()
-      .merge(buildDayScheduleMessage(normalizedSchedule.hours));
+      .merge(buildDayScheduleMessage(scheduleItemHours));
+  }
 
-    if (this.powerScheduleConfigService.isScheduleSendingEnabled()) {
+  private async deliverScheduleToGroups(
+    providerId: PowerScheduleProviderId,
+    dateIso: string,
+    messageText: BotMessageText,
+    scheduleItemHours: IScheduleItemHours,
+  ): Promise<void> {
+    if (!this.powerScheduleConfigService.isScheduleSendingEnabled()) {
+      void this.botService.sendMessageToOwner(
+        new BotMessageText(`Tried to send schedule, but sending is disabled (${providerId}, ${dateIso}) text:\n\n${messageText.toString()}`),
+      );
+      await this.persistProcessed(providerId, dateIso, new Date(), scheduleItemHours);
+      return;
+    }
+
+    const now = new Date();
+    const lastSentForDate = this.lastSentToGroupsAtByDate.get(dateIso);
+    const withinCooldown = lastSentForDate
+      && (now.getTime() - lastSentForDate.getTime()) < SEND_TO_GROUPS_COOLDOWN_MS;
+
+    if (withinCooldown) {
+      this.logger.debug(`Schedule change skipped (cooldown): dateIso=${dateIso}, providerId=${providerId}`);
+      const ownerMessageText = new BotMessageText()
+        .addLine(`ATTENTION! Skipped (sent to groups in last 30 mins): ${providerId}, ${dateIso}`)
+        .newLine()
+        .merge(messageText);
+      void this.botService.sendMessageToOwner(ownerMessageText);
+    } else {
+      this.lastSentToGroupsAtByDate.set(dateIso, now);
       await this.botService.sendMessageToAllEnabledGroups(messageText);
-
       const ownerMessageText = new BotMessageText()
         .addLine(`Sent (${providerId}, ${dateIso})`)
         .newLine()
         .merge(messageText);
       void this.botService.sendMessageToOwner(ownerMessageText);
-    } else {
-      void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send schedule, but sending is disabled (${providerId}, ${dateIso}) text:\n\n${messageText.toString()}`));
     }
-    await this.persistProcessed(providerId, dateIso, new Date(), normalizedSchedule.hours);
-
-    this.logger.debug(`Schedule sent: dateIso=${dateIso}, providerId=${providerId}`);
+    await this.persistProcessed(providerId, dateIso, new Date(), scheduleItemHours);
   }
 
   private async persistProcessed(
@@ -178,11 +214,7 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       return;
     }
 
-    const isNew = !!lastProcessed;
-    const messageText = new BotMessageText()
-      .addLine(BotMessageText.bold(buildScheduleTitleLine(date, isNew)))
-      .newLine()
-      .merge(buildDayScheduleMessage(lastProcessed.scheduleItemHours));
+    const messageText = this.buildScheduleMessageText(date, false, lastProcessed.scheduleItemHours);
 
     if (chatId !== undefined) {
       await this.botService.sendMessage(chatId, messageText);
