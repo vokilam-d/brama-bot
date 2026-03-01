@@ -20,6 +20,7 @@ import { IDtekObjectsResponse } from '../interfaces/dtek-response.interface';
 
 enum FeedItemIdPrefix {
   POWER = 'dcn_',
+  POWER_INFO = 'cmp_',
 }
 
 @Injectable()
@@ -236,7 +237,11 @@ export class KdService implements OnApplicationBootstrap {
 
     const schedulesDisabledTitle = `Графік не діє`;
     const relevantFeedItems = feed
-      .filter(feedItem => `${feedItem.id}`.startsWith(FeedItemIdPrefix.POWER) || feedItem.title?.includes(schedulesDisabledTitle))
+      .filter(feedItem => {
+        return `${feedItem.id}`.startsWith(FeedItemIdPrefix.POWER)
+          || `${feedItem.id}`.startsWith(FeedItemIdPrefix.POWER_INFO)
+          || feedItem.title?.includes(schedulesDisabledTitle);
+      })
       .reverse();
 
     const processedFeedItems: IFeedItem[] = [];
@@ -267,6 +272,7 @@ export class KdService implements OnApplicationBootstrap {
       const isPowerToggle = feedItem.title.includes(`Стабілізаційне відключення`)
         || feedItem.title.includes(`Світло повертається`)
         || feedItem.title.includes(schedulesDisabledTitle);
+      const isPowerInfo = feedItem.title.includes(`Коротші відключення`);
       const isScheduleToday = feedItem.title === `Новий графік`;
       const isScheduleTomorrow = feedItem.title === `Графік на завтра`;
 
@@ -276,7 +282,7 @@ export class KdService implements OnApplicationBootstrap {
         .newLine()
         .newLine();
 
-      if (isPowerToggle) {
+      if (isPowerToggle || isPowerInfo) {
         botMessageText.addLine(feedItem.description);
       // } else if (isScheduleToday || isScheduleTomorrow) {
       //   botMessageText.prependToFirstLine('🗓 ');
