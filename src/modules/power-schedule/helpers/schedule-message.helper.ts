@@ -3,8 +3,8 @@ import { IScheduleItemHours, PowerState } from '../interfaces/schedule.interface
 import { getMonthName } from '../../../helpers/get-month-name.helper';
 import { getDayName } from '../../../helpers/get-day-name.helper';
 
-export function buildScheduleTitleLine(date: Date, isNew: boolean): string {
-  const title = isNew ? `Новий графік` : `Графік`;
+export function buildScheduleTitleLine(date: Date, isFirstScheduleForDay: boolean): string {
+  const title = isFirstScheduleForDay ? `Графік` : `Новий графік`;
   return `🗓 ${title} на ${date.getDate()} ${getMonthName(date)}, ${getDayName(date)}`;
 }
 

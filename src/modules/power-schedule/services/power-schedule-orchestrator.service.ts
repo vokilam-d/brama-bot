@@ -87,10 +87,11 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     normalizedDate: Date,
     normalizedSchedule: INormalizedSchedule,
   ): Promise<void> {
-    const lastProcessed = await this.processedScheduleInfoModel.findOne({ dateIso }).lean().exec();
+    const dateIsoKey: keyof ProcessedScheduleInfo = 'dateIso';
+    const prevProcessed = await this.processedScheduleInfoModel.findOne({ [dateIsoKey]: dateIso }).lean().exec();
 
-    if (lastProcessed) {
-      const isScheduleChanged = Object.entries(lastProcessed.scheduleItemHours).some(([halfHour, processedPowerState]) => {
+    if (prevProcessed) {
+      const isScheduleChanged = Object.entries(prevProcessed.scheduleItemHours).some(([halfHour, processedPowerState]) => {
         return normalizedSchedule.hours[halfHour] !== processedPowerState;
       });
       if (!isScheduleChanged) {
@@ -99,7 +100,7 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       }
     }
 
-    const messageText = this.buildScheduleMessageText(normalizedDate, !lastProcessed, normalizedSchedule.hours);
+    const messageText = this.buildScheduleMessageText(normalizedDate, !prevProcessed, normalizedSchedule.hours);
     await this.deliverScheduleToGroups(providerId, dateIso, messageText, normalizedSchedule.hours);
     this.logger.debug(`Schedule sent: dateIso=${dateIso}, providerId=${providerId}`);
   }
@@ -114,17 +115,17 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     const messageText = new BotMessageText()
       .addLine(`Skipped (${providerId}, ${dateIso}): `)
       .newLine()
-      .merge(this.buildScheduleMessageText(normalizedDate, true, normalizedSchedule.hours))
+      .merge(this.buildScheduleMessageText(normalizedDate, false, normalizedSchedule.hours))
     void this.botService.sendMessageToOwner(messageText);
   }
 
   private buildScheduleMessageText(
     normalizedDate: Date,
-    isNew: boolean,
+    isFirstScheduleForDay: boolean,
     scheduleItemHours: IScheduleItemHours,
   ): BotMessageText {
     return new BotMessageText()
-      .addLine(BotMessageText.bold(buildScheduleTitleLine(normalizedDate, isNew)))
+      .addLine(BotMessageText.bold(buildScheduleTitleLine(normalizedDate, isFirstScheduleForDay)))
       .newLine()
       .merge(buildDayScheduleMessage(scheduleItemHours));
   }
@@ -202,19 +203,19 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     const dateIso = date.toISOString();
 
     const dateIsoKey: keyof ProcessedScheduleInfo = 'dateIso';
-    const lastProcessed: ProcessedScheduleInfo = await this.processedScheduleInfoModel
+    const prevProcessed: ProcessedScheduleInfo = await this.processedScheduleInfoModel
       .findOne({ [dateIsoKey]: dateIso })
       .lean()
       .exec();
 
-    if (!lastProcessed) {
+    if (!prevProcessed) {
       const message = `Sending schedule to chat: Failed: No schedule available for ${day} (dateIso=${dateIso}, chatId=${chatId}, sendToGroups=${sendToGroups})`;
       this.logger.warn(message);
       void this.botService.sendMessageToOwner(new BotMessageText(message));
       return;
     }
 
-    const messageText = this.buildScheduleMessageText(date, false, lastProcessed.scheduleItemHours);
+    const messageText = this.buildScheduleMessageText(date, true, prevProcessed.scheduleItemHours);
 
     if (chatId !== undefined) {
       await this.botService.sendMessage(chatId, messageText);
@@ -223,12 +224,12 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
         await this.botService.sendMessageToAllEnabledGroups(messageText);
 
         const ownerMessageText = new BotMessageText()
-          .addLine(`Sent (${lastProcessed.providerId}, ${dateIso})`)
+          .addLine(`Sent (${prevProcessed.providerId}, ${dateIso})`)
           .newLine()
           .merge(messageText);
         void this.botService.sendMessageToOwner(ownerMessageText);
       } else {
-        void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send schedule to groups, but sending is disabled (${lastProcessed.providerId}, ${dateIso}) text:\n\n${messageText.toString()}`));
+        void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send schedule to groups, but sending is disabled (${prevProcessed.providerId}, ${dateIso}) text:\n\n${messageText.toString()}`));
       }
     }
   }
