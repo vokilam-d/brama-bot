@@ -19,6 +19,7 @@ import {
   ApiMethodName,
 } from './telegram-api.service';
 import { BotConfigService } from './bot-config.service';
+import { ITelegramUser } from '../interfaces/user.interface';
 import { PowerScheduleConfigService } from '../../power-schedule/services/power-schedule-config.service';
 import { PowerScheduleProviderId } from '../../power-schedule/interfaces/schedule.interface';
 
@@ -33,6 +34,8 @@ export enum PendingMessageType {
   EshopGetInfo = 'eshopGetInfo',
   GetPowerStatus = 'getPowerStatus',
 }
+
+const IGNORE_UNMENTIONED_CHAT_ID = -1003708538221;
 
 enum AdminBotCommand {
   GroupsSettings = '/groups_settings',
@@ -59,6 +62,8 @@ export class BotService implements OnApplicationBootstrap {
 
   private pendingMessages: { type: PendingMessageType, chatId: number, messageId: number, }[] = [];
 
+  private botUser: ITelegramUser | null = null;
+
   private readonly maxMessageTextSize = 4000;
   private readonly textParseMode = 'HTML';
   private readonly supportedTags: string[] = ['b', 'i', 'a', 'pre', 'code', 'blockquote'];
@@ -74,6 +79,8 @@ export class BotService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     await this.botConfigService.whenReady();
+
+    this.cacheBotUser();
 
     // this.setWebhook();
 
@@ -242,6 +249,16 @@ export class BotService implements OnApplicationBootstrap {
     const isOwnerCallbackQuery = update.callback_query && botConfig.ownerIds.includes(update.callback_query.from.id);
     const isPowerStatusGroupMessage = update.message?.chat.id === botConfig.powerStatusGroupId;
     const isEshopChatMessage = update.message?.chat.id === botConfig.eshopChatId;
+    const isIgnoreUnmentionedChatMessage = update.message?.chat.id === IGNORE_UNMENTIONED_CHAT_ID;
+
+    if (isIgnoreUnmentionedChatMessage) {
+      const text = update.message.text ?? update.message.caption ?? '';
+      const containsBotMention = this.botUser?.username
+        && (text.includes(`@${this.botUser.username}`) || text.includes(this.botUser.username));
+      if (!containsBotMention) {
+        return;
+      }
+    }
 
     if (
       isOwnerMessage
@@ -856,4 +873,12 @@ export class BotService implements OnApplicationBootstrap {
     }
   }
 
+  private async cacheBotUser(): Promise<void> {
+    try {
+      this.botUser = await this.telegramApiService.getMe();
+      this.logger.debug(`Cached bot user: @${this.botUser.username}`);
+    } catch (e) {
+      this.logger.warn(`Failed to cache bot user: ${e?.message ?? e}`);
+    }
+  }
 }

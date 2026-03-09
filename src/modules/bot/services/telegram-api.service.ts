@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 import { CONFIG } from '../../../config';
+import { ITelegramUser } from '../interfaces/user.interface';
 
 export enum ApiMethodName {
   SendMessage = 'sendMessage',
@@ -78,6 +79,10 @@ export class TelegramApiService {
         throw errorNormalized;
       }
     }
+  }
+
+  async getMe(): Promise<ITelegramUser> {
+    return this.execMethod<ITelegramUser>(ApiMethodName.GetMe, {});
   }
 
   private delay(ms: number): Promise<void> {
