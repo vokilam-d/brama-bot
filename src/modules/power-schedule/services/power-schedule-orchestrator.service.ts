@@ -55,6 +55,9 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     date: Date,
     normalizedSchedule: INormalizedSchedule,
   ): Promise<void> {
+    if (providerId === PowerScheduleProviderId.Dtek) {
+      this.logger.debug(`[DTEK] onScheduleChange: received, date=${date.toISOString()}`);
+    }
     const normalizedDate = normalizeScheduleDate(date);
     const dateIso = normalizedDate.toISOString();
 
@@ -87,6 +90,9 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     normalizedDate: Date,
     normalizedSchedule: INormalizedSchedule,
   ): Promise<void> {
+    if (providerId === PowerScheduleProviderId.Dtek) {
+      this.logger.debug(`[DTEK] handleScheduleChange: start dateIso=${dateIso}`);
+    }
     const dateIsoKey: keyof ProcessedScheduleInfo = 'dateIso';
     const prevProcessed = await this.processedScheduleInfoModel.findOne({ [dateIsoKey]: dateIso }).lean().exec();
 
@@ -101,6 +107,9 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     }
 
     const messageText = this.buildScheduleMessageText(normalizedDate, !prevProcessed, normalizedSchedule.hours);
+    if (providerId === PowerScheduleProviderId.Dtek) {
+      this.logger.debug(`[DTEK] handleScheduleChange: calling deliverScheduleToGroups`);
+    }
     await this.deliverScheduleToGroups(providerId, dateIso, messageText, normalizedSchedule.hours);
     this.logger.debug(`Schedule sent: dateIso=${dateIso}, providerId=${providerId}`);
   }
@@ -136,6 +145,9 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     messageText: BotMessageText,
     scheduleItemHours: IScheduleItemHours,
   ): Promise<void> {
+    if (providerId === PowerScheduleProviderId.Dtek) {
+      this.logger.debug(`[DTEK] deliverScheduleToGroups: start dateIso=${dateIso}`);
+    }
     if (!this.powerScheduleConfigService.isScheduleSendingEnabled()) {
       void this.botService.sendMessageToOwner(
         new BotMessageText(`Tried to send schedule, but sending is disabled (${providerId}, ${dateIso}) text:\n\n${messageText.toString()}`),
@@ -157,6 +169,9 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
         .merge(messageText);
       void this.botService.sendMessageToOwner(ownerMessageText);
     } else {
+      if (providerId === PowerScheduleProviderId.Dtek) {
+        this.logger.debug(`[DTEK] deliverScheduleToGroups: sending to groups`);
+      }
       this.lastSentToGroupsAtByDate.set(dateIso, now);
       await this.botService.sendMessageToAllEnabledGroups(messageText);
       const ownerMessageText = new BotMessageText()
