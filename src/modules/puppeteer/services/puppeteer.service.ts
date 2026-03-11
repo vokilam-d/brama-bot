@@ -63,7 +63,6 @@ export class PuppeteerService implements OnApplicationBootstrap, OnModuleDestroy
    * New calls wait if a relaunch is in progress.
    */
   async executeWithPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
-    this.logger.debug('[Puppeteer] executeWithPage: waiting relaunchMutex');
     await this.relaunchMutex;
     this.inUseCount++;
     if (this.inUseCount === 1) {
@@ -71,15 +70,11 @@ export class PuppeteerService implements OnApplicationBootstrap, OnModuleDestroy
         this.whenIdleResolve = resolve;
       });
     }
-    this.logger.debug(`[Puppeteer] executeWithPage: inUseCount=${this.inUseCount}, getting browser`);
     try {
       const browser = await this.getBrowser();
-      this.logger.debug('[Puppeteer] executeWithPage: creating new page');
       const page = await browser.newPage();
       try {
-        this.logger.debug('[Puppeteer] executeWithPage: running user fn');
         const result = await fn(page);
-        this.logger.debug('[Puppeteer] executeWithPage: user fn done');
         return result;
       } finally {
         await page.close();

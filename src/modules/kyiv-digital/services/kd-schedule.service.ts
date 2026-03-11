@@ -9,6 +9,7 @@ import {
   INormalizedSchedule,
   PowerScheduleProviderId,
   PowerState,
+  type IScheduleItemHours,
 } from '../../power-schedule/interfaces/schedule.interface';
 import { BasePowerScheduleProvider } from '../../power-schedule/base/base-power-schedule-provider';
 import { PowerScheduleOrchestratorService } from '../../power-schedule/services/power-schedule-orchestrator.service';
@@ -36,8 +37,8 @@ export class KdScheduleService
     super(powerScheduleOrchestrator, botService, powerScheduleConfigService);
   }
 
-  protected override shouldSkipSchedule(schedule: INormalizedSchedule): boolean {
-    return Object.values(schedule.hours).some((s) => s === PowerState.MaybeOff);
+  protected override shouldSkipSchedule(scheduleItemHours: IScheduleItemHours): boolean {
+    return Object.values(scheduleItemHours).some((s) => s === PowerState.MaybeOff);
   }
 
   override async fetchSchedules(): Promise<INormalizedSchedule[]> {

@@ -33,7 +33,7 @@ export abstract class BasePowerScheduleProvider implements OnApplicationBootstra
 
   abstract fetchSchedules(): Promise<INormalizedSchedule[]>;
 
-  protected abstract shouldSkipSchedule(schedule: INormalizedSchedule): boolean;
+  protected abstract shouldSkipSchedule(scheduleItemHours: IScheduleItemHours): boolean;
 
   protected hashSchedule(hours: IScheduleItemHours): string {
     return JSON.stringify(hours);
@@ -91,51 +91,27 @@ export abstract class BasePowerScheduleProvider implements OnApplicationBootstra
     if (!enabled) {
       return;
     }
-    if (this.providerId === PowerScheduleProviderId.Dtek) {
-      this.logger.debug(`[DTEK] schedulePollAndNotify: starting poll, next in ${this.pollIntervalMs}ms`);
-    }
     await this.pollAndNotify();
-    if (this.providerId === PowerScheduleProviderId.Dtek) {
-      this.logger.debug(`[DTEK] schedulePollAndNotify: poll done, scheduling next in ${this.pollIntervalMs}ms`);
-    }
     this.pollTimer = setTimeout(() => this.schedulePollAndNotify(), this.pollIntervalMs);
   }
 
   private async pollAndNotify(): Promise<void> {
-    if (this.providerId === PowerScheduleProviderId.Dtek) {
-      this.logger.debug('[DTEK] pollAndNotify: start');
-    }
     try {
-      if (this.providerId === PowerScheduleProviderId.Dtek) {
-        this.logger.debug('[DTEK] pollAndNotify: calling fetchSchedules');
-      }
       const schedules = await this.fetchSchedules();
-      if (this.providerId === PowerScheduleProviderId.Dtek) {
-        this.logger.debug(`[DTEK] pollAndNotify: fetchSchedules returned ${schedules.length} schedules`);
-      }
       this.consecutiveErrorCount = 0;
       for (const schedule of schedules) {
         const dateIso = this.getDateIso(schedule);
-        if (this.shouldSkipSchedule(schedule)) {
-          if (this.providerId === PowerScheduleProviderId.Dtek) {
-            this.logger.debug(`[DTEK] pollAndNotify: skip dateIso=${dateIso} (shouldSkipSchedule)`);
-          }
+        if (this.shouldSkipSchedule(schedule.hours)) {
           this.lastScheduleHashes.delete(dateIso);
           continue;
         }
 
         const hash = this.hashSchedule(schedule.hours);
         if (this.lastScheduleHashes.get(dateIso) === hash) {
-          if (this.providerId === PowerScheduleProviderId.Dtek) {
-            this.logger.debug(`[DTEK] pollAndNotify: skip dateIso=${dateIso} (hash unchanged)`);
-          }
           continue;
         }
 
         try {
-          if (this.providerId === PowerScheduleProviderId.Dtek) {
-            this.logger.debug(`[DTEK] pollAndNotify: schedule changed for ${dateIso}, calling onScheduleChange`);
-          }
           this.logger.debug(`Sending ${this.providerId} schedule for ${dateIso}`);
           await this.powerScheduleOrchestrator.onScheduleChange(
             this.providerId,
@@ -143,9 +119,6 @@ export abstract class BasePowerScheduleProvider implements OnApplicationBootstra
             schedule,
           );
           this.lastScheduleHashes.set(dateIso, hash);
-          if (this.providerId === PowerScheduleProviderId.Dtek) {
-            this.logger.debug(`[DTEK] pollAndNotify: onScheduleChange done for ${dateIso}`);
-          }
         } catch (error) {
           this.handleError(
             error,
@@ -153,14 +126,8 @@ export abstract class BasePowerScheduleProvider implements OnApplicationBootstra
           );
         }
       }
-      if (this.providerId === PowerScheduleProviderId.Dtek) {
-        this.logger.debug('[DTEK] pollAndNotify: done');
-      }
     } catch (error) {
       this.consecutiveErrorCount++;
-      if (this.providerId === PowerScheduleProviderId.Dtek) {
-        this.logger.debug(`[DTEK] pollAndNotify: fetch error, consecutiveErrorCount=${this.consecutiveErrorCount}`);
-      }
       if (this.consecutiveErrorCount >= CONSECUTIVE_ERROR_THRESHOLD) {
         this.handleError(error, `${this.providerId}: Failed to fetch schedule`);
         this.consecutiveErrorCount = 0;

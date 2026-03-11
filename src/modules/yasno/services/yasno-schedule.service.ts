@@ -10,6 +10,7 @@ import { CONFIG } from '../../../config';
 import {
   INormalizedSchedule,
   PowerScheduleProviderId,
+  type IScheduleItemHours,
 } from '../../power-schedule/interfaces/schedule.interface';
 import { BasePowerScheduleProvider } from '../../power-schedule/base/base-power-schedule-provider';
 import { PowerScheduleOrchestratorService } from '../../power-schedule/services/power-schedule-orchestrator.service';
@@ -70,7 +71,7 @@ export class YasnoScheduleService
     super(powerScheduleOrchestrator, botService, powerScheduleConfigService);
   }
 
-  protected override shouldSkipSchedule(_schedule: INormalizedSchedule): boolean {
+  protected override shouldSkipSchedule(_scheduleItemHours: IScheduleItemHours): boolean {
     return false;
   }
 
