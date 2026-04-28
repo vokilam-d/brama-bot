@@ -58,36 +58,36 @@ export class KdService implements OnApplicationBootstrap {
   }
 
   async onApplicationBootstrap(): Promise<void> {
-    this.botService.events.on(PendingMessageType.AskForCode, code => {
-      this.logger.debug({ code });
-    });
+    // this.botService.events.on(PendingMessageType.AskForCode, code => {
+    //   this.logger.debug({ code });
+    // });
 
-    setInterval(() => {
-      if (Object.values(this.feedRequestsCounter.limitsLeft.values()).some(limit => limit < 56)) {
-        this.logger.warn({
-          count: this.feedRequestsCounter.count,
-          limitsLeft: [...this.feedRequestsCounter.limitsLeft.values()],
-        });
-      }
-      this.feedRequestsCounter.count = 0;
-      this.feedRequestsCounter.limitsLeft.clear();
-    }, CONFIG.kyivDigital.feedRequestIntervalMs * 360);
+    // setInterval(() => {
+    //   if (Object.values(this.feedRequestsCounter.limitsLeft.values()).some(limit => limit < 56)) {
+    //     this.logger.warn({
+    //       count: this.feedRequestsCounter.count,
+    //       limitsLeft: [...this.feedRequestsCounter.limitsLeft.values()],
+    //     });
+    //   }
+    //   this.feedRequestsCounter.count = 0;
+    //   this.feedRequestsCounter.limitsLeft.clear();
+    // }, CONFIG.kyivDigital.feedRequestIntervalMs * 360);
 
-    try {
-      await this.ensureAndCacheConfig();
-      await this.cacheProcessedFeedItems();
-      await this.validatePersistedToken();
-    } catch (e) {
-      this.onError(e, `Failed to init`);
-    } finally {
-      this.resolveReady();
-    }
+    // try {
+    //   await this.ensureAndCacheConfig();
+    //   await this.cacheProcessedFeedItems();
+    //   await this.validatePersistedToken();
+    // } catch (e) {
+    //   this.onError(e, `Failed to init`);
+    // } finally {
+    //   this.resolveReady();
+    // }
 
-    this.logger.debug(`Dtek object id=${CONFIG.kyivDigital.dtekObjectId}, checking it`);
-    this.checkDtekObject().then();
+    // this.logger.debug(`Dtek object id=${CONFIG.kyivDigital.dtekObjectId}, checking it`);
+    // this.checkDtekObject().then();
 
-    this.logger.debug(`Requesting feed`);
-    this.handleFeed().then();
+    // this.logger.debug(`Requesting feed`);
+    // this.handleFeed().then();
   }
 
   private async ensureAndCacheConfig(): Promise<void> {
