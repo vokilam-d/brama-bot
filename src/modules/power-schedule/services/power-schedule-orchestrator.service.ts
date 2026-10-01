@@ -12,6 +12,7 @@ import {
 import { ProcessedScheduleInfo } from '../schemas/processed-schedule-info.schema';
 import {
   buildDayScheduleMessage,
+  buildScheduleSourceLine,
   buildScheduleTitleLine,
 } from '../helpers/schedule-message.helper';
 import { normalizeScheduleDate } from '../helpers/normalize-schedule-date.helper';
@@ -100,7 +101,12 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       }
     }
 
-    const messageText = this.buildScheduleMessageText(normalizedDate, !prevProcessed, normalizedSchedule.hours);
+    const messageText = this.buildScheduleMessageText(
+      providerId,
+      normalizedDate,
+      !prevProcessed,
+      normalizedSchedule.hours,
+    );
     await this.deliverScheduleToGroups(providerId, dateIso, messageText, normalizedSchedule.hours);
     this.logger.debug(`Schedule sent: dateIso=${dateIso}, providerId=${providerId}`);
   }
@@ -115,11 +121,14 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     const messageText = new BotMessageText()
       .addLine(`Skipped (${providerId}, ${dateIso}): `)
       .newLine()
-      .merge(this.buildScheduleMessageText(normalizedDate, false, normalizedSchedule.hours))
+      .merge(
+        this.buildScheduleMessageText(providerId, normalizedDate, false, normalizedSchedule.hours),
+      )
     void this.botService.sendMessageToOwner(messageText);
   }
 
   private buildScheduleMessageText(
+    providerId: PowerScheduleProviderId,
     normalizedDate: Date,
     isFirstScheduleForDay: boolean,
     scheduleItemHours: IScheduleItemHours,
@@ -127,7 +136,9 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     return new BotMessageText()
       .addLine(BotMessageText.bold(buildScheduleTitleLine(normalizedDate, isFirstScheduleForDay)))
       .newLine()
-      .merge(buildDayScheduleMessage(scheduleItemHours));
+      .merge(buildDayScheduleMessage(scheduleItemHours))
+      .newLine()
+      .add(BotMessageText.italic(buildScheduleSourceLine(providerId)));
   }
 
   private async deliverScheduleToGroups(
@@ -215,7 +226,12 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       return;
     }
 
-    const messageText = this.buildScheduleMessageText(date, true, prevProcessed.scheduleItemHours);
+    const messageText = this.buildScheduleMessageText(
+      prevProcessed.providerId,
+      date,
+      true,
+      prevProcessed.scheduleItemHours,
+    );
 
     if (chatId !== undefined) {
       await this.botService.sendMessage(chatId, messageText);

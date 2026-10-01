@@ -1,11 +1,21 @@
 import { BotMessageText } from '../../bot/helpers/bot-message-text.helper';
-import { IScheduleItemHours, PowerState } from '../interfaces/schedule.interface';
+import {
+  IScheduleItemHours,
+  POWER_SCHEDULE_PROVIDER_NAMES,
+  PowerScheduleProviderId,
+  PowerState,
+} from '../interfaces/schedule.interface';
 import { getMonthName } from '../../../helpers/get-month-name.helper';
 import { getDayName } from '../../../helpers/get-day-name.helper';
 
 export function buildScheduleTitleLine(date: Date, isFirstScheduleForDay: boolean): string {
   const title = isFirstScheduleForDay ? `Графік` : `Новий графік`;
   return `🗓 ${title} на ${date.getDate()} ${getMonthName(date)}, ${getDayName(date)}`;
+}
+
+export function buildScheduleSourceLine(providerId: PowerScheduleProviderId): string {
+  const providerName = POWER_SCHEDULE_PROVIDER_NAMES[providerId] ?? providerId;
+  return `ℹ️ Джерело: ${providerName}`;
 }
 
 export function buildDayScheduleMessage(

@@ -65,3 +65,9 @@ export enum PowerScheduleProviderId {
   Dtek = 'dtek',
   Yasno = 'yasno',
 }
+
+export const POWER_SCHEDULE_PROVIDER_NAMES: Record<PowerScheduleProviderId, string> = {
+  [PowerScheduleProviderId.Kd]: 'Київ Цифровий',
+  [PowerScheduleProviderId.Dtek]: 'ДТЕК',
+  [PowerScheduleProviderId.Yasno]: 'Yasno',
+};
