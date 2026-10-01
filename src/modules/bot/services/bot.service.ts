@@ -2,7 +2,10 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CONFIG } from '../../../config';
-import { BotMessageText } from '../helpers/bot-message-text.helper';
+import {
+  BotMessageText,
+  ITelegramMessageTextAndEntities,
+} from '../helpers/bot-message-text.helper';
 import { ITelegramReplyParameters } from '../interfaces/telegram-reply-parameters.interface';
 import { ITelegramInlineKeyboardMarkup } from '../interfaces/inline-keyboard-markup.interface';
 import { ITelegramReplyKeyboardMarkup } from '../interfaces/reply-keyboard-markup.interface';
@@ -25,6 +28,9 @@ import { PowerScheduleProviderId } from '../../power-schedule/interfaces/schedul
 
 export type ReplyMarkup = ITelegramInlineKeyboardMarkup | ITelegramReplyKeyboardMarkup | ITelegramReplyKeyboardRemove;
 
+/** Either a message built by the bot, or a text with entities taken from telegram as is */
+export type SendableMessageText = BotMessageText | ITelegramMessageTextAndEntities;
+
 export enum PendingMessageType {
   AskForCode = 'askForCode',
   GetSchedule = 'getSchedule',
@@ -33,6 +39,13 @@ export enum PendingMessageType {
   EshopUnsubscribe = 'eshopUnsubscribe',
   EshopGetInfo = 'eshopGetInfo',
   GetPowerStatus = 'getPowerStatus',
+}
+
+export interface ISendToAllGroupsResult {
+  isSkippedByGlobalGate: boolean;
+  sentGroupCount: number;
+  failedGroupCount: number;
+  skippedGroupCount: number;
 }
 
 const IGNORE_UNMENTIONED_CHAT_ID = -1003708538221;
@@ -51,6 +64,7 @@ enum AdminBotCommand {
   PowerStatusGroup = '/power_status_group',
   GetPowerStatus = '/get_power_status',
   ScheduleSettings = '/schedule_settings',
+  SendMessageToAll = '/send_message_to_all',
 }
 
 @Injectable()
@@ -62,11 +76,15 @@ export class BotService implements OnApplicationBootstrap {
 
   private pendingMessages: { type: PendingMessageType, chatId: number, messageId: number, }[] = [];
 
+  private customMessageDrafts: {
+    chatId: number,
+    messageIds: number[],
+    text: ITelegramMessageTextAndEntities,
+  }[] = [];
+
   private botUser: ITelegramUser | null = null;
 
   private readonly maxMessageTextSize = 4000;
-  private readonly textParseMode = 'HTML';
-  private readonly supportedTags: string[] = ['b', 'i', 'a', 'pre', 'code', 'blockquote'];
 
   constructor(
     @InjectModel(BotSentMessage.name) private botSentMessageModel: Model<BotSentMessage>,
@@ -115,6 +133,9 @@ export class BotService implements OnApplicationBootstrap {
     }
     if (isOwner && callbackQuery.data?.startsWith('group_')) {
       await this.onGroupSettingsCallback(callbackQuery);
+    }
+    if (isOwner && callbackQuery.data?.startsWith('custom_msg_')) {
+      await this.onCustomMessageCallback(callbackQuery);
     }
   }
 
@@ -227,18 +248,15 @@ export class BotService implements OnApplicationBootstrap {
   private async sendStartMessage(message: ITelegramMessage): Promise<void> {
     const botConfig = this.botConfigService.getConfig();
     const channelLink = BotMessageText.link(
-      { url: 'https://t.me/brama_kyiv_digital' },
+      'https://t.me/brama_kyiv_digital',
       't.me/brama_kyiv_digital',
     );
-    const ownerLink = BotMessageText.link(
-      { userId: botConfig.ownerIds[0] },
-      '@vokilam',
-    );
+    const ownerLink = BotMessageText.mention(botConfig.ownerIds[0], '@vokilam');
     const text = new BotMessageText(`Вітаю! Я неофіційний бот для сповіщень від "Київ Цифровий" щодо відключень світла у ЖК "Сонячна Брама".`)
       .newLine()
-      .addLine(`Для отримання сповіщень, можете підписатись на канал: ${channelLink}.`)
+      .addLine([`Для отримання сповіщень, можете підписатись на канал: `, channelLink, `.`])
       .newLine()
-      .addLine(`Або якщо Ви бажаєте отримувати сповіщення у власній групі, будь ласка, зверніться до адміністратора бота ${ownerLink}`);
+      .addLine([`Або якщо Ви бажаєте отримувати сповіщення у власній групі, будь ласка, зверніться до адміністратора бота `, ownerLink]);
 
     await this.sendMessage(message.chat.id, text);
   }
@@ -299,7 +317,7 @@ export class BotService implements OnApplicationBootstrap {
     const chatId = message.chat.id;
 
     try {
-      const [command, ...args] = message.text.split(' ');
+      const [command, ...args] = message.text.split(/\s+/);
       switch (command) {
         case AdminBotCommand.GroupsSettings: {
           const groupsText = this.buildGroupsSettingsText();
@@ -334,6 +352,11 @@ export class BotService implements OnApplicationBootstrap {
           const scheduleText = this.buildScheduleSettingsText();
           const scheduleKeyboard = this.buildScheduleSettingsKeyboard();
           await this.sendMessage(chatId, scheduleText, { replyMarkup: scheduleKeyboard });
+          break;
+        }
+
+        case AdminBotCommand.SendMessageToAll: {
+          await this.onOwnerSendMessageToAll(message);
           break;
         }
 
@@ -444,25 +467,39 @@ export class BotService implements OnApplicationBootstrap {
   }
 
   async sendMessageToAllEnabledGroups(
-    text: BotMessageText,
-  ): Promise<void> {
-    this.logger.debug(`Sending message to all enabled groups... (text=${text.toString()})`);
+    text: SendableMessageText,
+  ): Promise<ISendToAllGroupsResult> {
+    this.logger.debug(`Sending message to all enabled groups... (text=${BotMessageText.toPlainText(text)})`);
+    const result: ISendToAllGroupsResult = {
+      isSkippedByGlobalGate: false,
+      sentGroupCount: 0,
+      failedGroupCount: 0,
+      skippedGroupCount: 0,
+    };
+
     const botConfig = this.botConfigService.getConfig();
     if (!botConfig.isEnabled) {
-      this.sendMessageToOwner(new BotMessageText(`Tried to send message to all enabled groups, but bot is disabled (text=${text.toString()})`)).then();
+      this.sendMessageToOwner(new BotMessageText(
+        `Tried to send message to all enabled groups, but bot is disabled (text=${BotMessageText.toPlainText(text)})`,
+      )).then();
       this.logger.warn(`Sending message to all enabled groups: Exiting, bot is disabled`);
-      return;
+      result.isSkippedByGlobalGate = true;
+      return result;
     }
 
     for (const group of botConfig.groups) {
       if (!group.isEnabled) {
         this.logger.debug(`Sending message to all enabled groups: Skipping disabled group (id=${group.id}, comment=${group.comment})`);
+        result.skippedGroupCount++;
         continue;
       }
 
       try {
         await this.sendMessage(group.id, text, { messageThreadId: group.threadId });
+        result.sentGroupCount++;
       } catch (e) {
+        result.failedGroupCount++;
+
         const message = `Failed to send message to group`;
         this.logger.error(message);
         this.logger.error(e);
@@ -474,6 +511,8 @@ export class BotService implements OnApplicationBootstrap {
     }
 
     this.logger.debug(`Sending message to all enabled groups: Finished`);
+
+    return result;
   }
 
   async sendMessageToOwner(
@@ -508,9 +547,9 @@ export class BotService implements OnApplicationBootstrap {
   }
 
   async sendMessageToEshop(
-    text: BotMessageText,
+    text: SendableMessageText,
   ): Promise<void> {
-    this.logger.debug(`Sending message to eshop... (text=${text.toString()})`);
+    this.logger.debug(`Sending message to eshop... (text=${BotMessageText.toPlainText(text)})`);
     const botConfig = this.botConfigService.getConfig();
     if (!botConfig.eshopChatId) {
       this.logger.warn(`Sending message to eshop: Exiting, no eshop chat ID configured`);
@@ -532,13 +571,13 @@ export class BotService implements OnApplicationBootstrap {
   }
 
   async sendMessageToPowerStatusGroup(
-    text: BotMessageText,
+    text: SendableMessageText,
     options: {
       replyParameters?: ITelegramReplyParameters;
       disableNotification?: boolean;
     } = {},
   ): Promise<void> {
-    this.logger.debug(`Sending message to power status group... (text=${text.toString()})`);
+    this.logger.debug(`Sending message to power status group... (text=${BotMessageText.toPlainText(text)})`);
     const botConfig = this.botConfigService.getConfig();
     if (!botConfig.powerStatusGroupId) {
       this.logger.warn(`Sending message to power status group: Exiting, no power status group chat ID configured`);
@@ -568,9 +607,9 @@ export class BotService implements OnApplicationBootstrap {
 
   async sendPhotoToEshop(
     photoUrl: string,
-    text: BotMessageText,
+    text: SendableMessageText,
   ): Promise<void> {
-    this.logger.debug(`Sending photo to eshop... (photoUrl=${photoUrl}, text=${text.toString()})`);
+    this.logger.debug(`Sending photo to eshop... (photoUrl=${photoUrl}, text=${BotMessageText.toPlainText(text)})`);
     const botConfig = this.botConfigService.getConfig();
     if (!botConfig.eshopChatId) {
       this.logger.warn(`Sending photo to eshop: Exiting, no eshop chat ID configured`);
@@ -578,11 +617,12 @@ export class BotService implements OnApplicationBootstrap {
     }
 
     try {
+      const [caption] = BotMessageText.toTextAndEntitiesParts(text, this.maxMessageTextSize);
       await this.telegramApiService.execMethod(ApiMethodName.SendPhoto, {
         chat_id: botConfig.eshopChatId,
         photo: photoUrl,
-        caption: text.toString(),
-        parse_mode: this.textParseMode,
+        caption: caption?.text,
+        caption_entities: caption?.entities,
       });
     } catch (e) {
       const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
@@ -595,7 +635,7 @@ export class BotService implements OnApplicationBootstrap {
 
   async sendMessage(
     chatId: string | number,
-    text: BotMessageText,
+    text: SendableMessageText,
     options: {
       messageThreadId?: number,
       replyParameters?: ITelegramReplyParameters,
@@ -603,13 +643,11 @@ export class BotService implements OnApplicationBootstrap {
       disableNotification?: boolean,
     } = {},
   ): Promise<ITelegramMessage[]> {
-    let textStr = this.escapeStr(text.toString());
     const payload: any = {
       chat_id: chatId,
       text: null,
     };
 
-    payload.parse_mode = this.textParseMode;
     if (options.messageThreadId) {
       payload.message_thread_id = options.messageThreadId;
     }
@@ -624,9 +662,10 @@ export class BotService implements OnApplicationBootstrap {
     }
 
     const sentMessages: ITelegramMessage[] = [];
-    while (textStr) {
-      payload.text = textStr.slice(0, this.maxMessageTextSize);
-      textStr = textStr.slice(this.maxMessageTextSize);
+    const textParts = BotMessageText.toTextAndEntitiesParts(text, this.maxMessageTextSize);
+    for (const textPart of textParts) {
+      payload.text = textPart.text;
+      payload.entities = textPart.entities;
 
       const sentMessage = await this.telegramApiService.execMethod<ITelegramMessage>(
         ApiMethodName.SendMessage,
@@ -638,6 +677,23 @@ export class BotService implements OnApplicationBootstrap {
     this.persistSentMessages(sentMessages).then();
 
     return sentMessages;
+  }
+
+  private async editMessageText(
+    chatId: number,
+    messageId: number,
+    text: SendableMessageText,
+    replyMarkup?: ReplyMarkup,
+  ): Promise<void> {
+    const [textPart] = BotMessageText.toTextAndEntitiesParts(text, this.maxMessageTextSize);
+
+    await this.telegramApiService.execMethod(ApiMethodName.EditMessageText, {
+      chat_id: chatId,
+      message_id: messageId,
+      text: textPart?.text,
+      entities: textPart?.entities,
+      reply_markup: replyMarkup,
+    });
   }
 
   private async setWebhook(): Promise<void> {
@@ -657,23 +713,6 @@ export class BotService implements OnApplicationBootstrap {
       this.logger.error(`Failed to set webhook:`);
       this.logger.error(e);
     }
-  }
-
-  private escapeStr(str: string = ''): string {
-    return str
-      .replaceAll('&', '&amp;')
-      .replaceAll(/<.+?>/g, value => {
-        const tagWithAttrs = value.slice(1, value.length - 1);
-        const [tagNameWithClosing] = tagWithAttrs.split(' ');
-        const isClosingTag = tagNameWithClosing.startsWith('/');
-        const tagName = isClosingTag ? tagNameWithClosing.slice(1) : tagNameWithClosing;
-
-        if (this.supportedTags.includes(tagName)) {
-          return value;
-        } else {
-          return `&lt;${tagWithAttrs}&gt;`;
-        }
-      });
   }
 
   private async persistSentMessages(sentMessages: ITelegramMessage[]): Promise<void> {
@@ -760,15 +799,12 @@ export class BotService implements OnApplicationBootstrap {
       await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
         callback_query_id: callbackQuery.id,
       });
-      const text = this.buildScheduleSettingsText();
-      const keyboard = this.buildScheduleSettingsKeyboard();
-      await this.telegramApiService.execMethod(ApiMethodName.EditMessageText, {
-        chat_id: callbackQuery.message.chat.id,
-        message_id: callbackQuery.message.message_id,
-        text: text.toString(),
-        parse_mode: this.textParseMode,
-        reply_markup: keyboard,
-      });
+      await this.editMessageText(
+        callbackQuery.message.chat.id,
+        callbackQuery.message.message_id,
+        this.buildScheduleSettingsText(),
+        this.buildScheduleSettingsKeyboard(),
+      );
 
       this.logger.debug(`Schedule settings callback: Finished (data=${callbackQuery.data})`);
     } catch (e) {
@@ -789,14 +825,25 @@ export class BotService implements OnApplicationBootstrap {
       .newLine()
       .addLine(`${botStatus} Глобальна відправка: ${botConfig.isEnabled ? 'увімкнено' : 'вимкнено'}`)
       .newLine()
-      .addLine(`Owner IDs: ${botConfig.ownerIds.map((id) => BotMessageText.bold(id)).join(', ')}`)
+      .addLine([
+        `Owner IDs: `,
+        ...botConfig.ownerIds.flatMap((id, index) => {
+          return index === 0
+            ? [BotMessageText.bold(id)]
+            : [`, `, BotMessageText.bold(id)];
+        }),
+      ])
       .newLine()
       .addLine('Groups:');
     for (let i = 0; i < botConfig.groups.length; i++) {
       const group = botConfig.groups[i];
       const status = group.isEnabled ? '✅' : '❌';
       const threadId = group.threadId ? ` (threadId=${group.threadId})` : '';
-      text.addLine(` ${i + 1}. ${status} ${BotMessageText.bold(group.id)}${threadId}: "${group.comment}"`);
+      text.addLine([
+        ` ${i + 1}. ${status} `,
+        BotMessageText.bold(group.id),
+        `${threadId}: "${group.comment}"`,
+      ]);
     }
     text.newLine().addLine('Натисніть кнопку з номером, щоб перемкнути групу.');
     return text;
@@ -854,18 +901,162 @@ export class BotService implements OnApplicationBootstrap {
       await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
         callback_query_id: callbackQuery.id,
       });
-      const text = this.buildGroupsSettingsText();
-      const keyboard = this.buildGroupsSettingsKeyboard();
-      await this.telegramApiService.execMethod(ApiMethodName.EditMessageText, {
-        chat_id: callbackQuery.message.chat.id,
-        message_id: callbackQuery.message.message_id,
-        text: text.toString(),
-        parse_mode: this.textParseMode,
-        reply_markup: keyboard,
-      });
+      await this.editMessageText(
+        callbackQuery.message.chat.id,
+        callbackQuery.message.message_id,
+        this.buildGroupsSettingsText(),
+        this.buildGroupsSettingsKeyboard(),
+      );
     } catch (e) {
       const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
       this.logger.error(`Group settings callback failed: ${errorMessage}`);
+      await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
+        callback_query_id: callbackQuery.id,
+        text: errorMessage,
+      });
+    }
+  }
+
+  private async onOwnerSendMessageToAll(message: ITelegramMessage): Promise<void> {
+    const chatId = message.chat.id;
+    const sourceMessage = message.reply_to_message;
+
+    if (!sourceMessage) {
+      await this.sendMessage(chatId, new BotMessageText(
+        `Надішліть повідомлення, а потім дайте на нього відповідь командою ${AdminBotCommand.SendMessageToAll}`,
+      ));
+      return;
+    }
+
+    const sourceText = sourceMessage.text ?? sourceMessage.caption;
+    if (!sourceText?.trim()) {
+      await this.sendMessage(chatId, new BotMessageText(
+        `У повідомленні, на яке відповіли, немає тексту`,
+      ));
+      return;
+    }
+
+    // Telegram's own text and entities are passed through as is, so that any formatting survives
+    const customText: ITelegramMessageTextAndEntities = {
+      text: sourceText,
+      entities: sourceMessage.entities ?? sourceMessage.caption_entities ?? [],
+    };
+
+    await this.sendCustomMessagePreview(chatId, customText);
+  }
+
+  private async sendCustomMessagePreview(
+    chatId: number,
+    customText: ITelegramMessageTextAndEntities,
+  ): Promise<void> {
+    this.logger.debug(`Sending custom message preview... (chatId=${chatId})`);
+
+    // The preview goes through the very same send as the groups will get, so it renders the same
+    const previewMessages = await this.sendMessage(chatId, customText);
+    const previewMessage = previewMessages.filter(sentMessage => sentMessage).at(-1);
+    if (!previewMessage) {
+      this.logger.warn(`Sending custom message preview: Exiting, no preview message sent (chatId=${chatId})`);
+      return;
+    }
+
+    const botConfig = this.botConfigService.getConfig();
+    const enabledGroupCount = botConfig.groups.filter(group => group.isEnabled).length;
+
+    const confirmText = new BotMessageText()
+      .addLine(BotMessageText.bold(`Надіслати це повідомлення в групи?`))
+      .newLine()
+      .addLine([`Отримувачів (увімкнених груп): `, BotMessageText.bold(enabledGroupCount)]);
+
+    if (!botConfig.isEnabled) {
+      confirmText.addLine(`❌ Глобальна відправка вимкнена, повідомлення не буде надіслано (${AdminBotCommand.GroupsSettings})`);
+    }
+
+    const confirmMessages = await this.sendMessage(chatId, confirmText, {
+      replyParameters: { message_id: previewMessage.message_id },
+      replyMarkup: this.buildCustomMessageKeyboard(),
+    });
+
+    const messageIds = confirmMessages
+      .filter(confirmMessage => confirmMessage)
+      .map(confirmMessage => confirmMessage.message_id);
+    if (!messageIds.length) {
+      this.logger.warn(`Sending custom message preview: Exiting, no confirmation message sent (chatId=${chatId})`);
+      return;
+    }
+
+    this.customMessageDrafts.push({ chatId, messageIds, text: customText });
+
+    this.logger.debug(`Sending custom message preview: Finished (chatId=${chatId})`);
+  }
+
+  private buildCustomMessageKeyboard(): ITelegramInlineKeyboardMarkup {
+    return {
+      inline_keyboard: [[
+        { text: '✅ Надіслати', callback_data: 'custom_msg_send' },
+        { text: '❌ Скасувати', callback_data: 'custom_msg_cancel' },
+      ]],
+    };
+  }
+
+  private async onCustomMessageCallback(callbackQuery: ITelegramCallbackQuery): Promise<void> {
+    this.logger.debug(`Custom message callback (data=${callbackQuery.data})`);
+
+    const data = callbackQuery.data;
+    const chatId = callbackQuery.message?.chat.id;
+    const messageId = callbackQuery.message?.message_id;
+
+    const draftIndex = this.customMessageDrafts.findIndex(draft => {
+      return draft.chatId === chatId && draft.messageIds.includes(messageId);
+    });
+    if (draftIndex === -1) {
+      this.logger.debug(`Custom message callback: Exiting, no draft found (data=${data})`);
+      await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
+        callback_query_id: callbackQuery.id,
+        text: 'Чернетку не знайдено, створіть повідомлення заново',
+      });
+      return;
+    }
+
+    // Remove the draft before sending, so repeated clicks cannot send it twice
+    const [draft] = this.customMessageDrafts.splice(draftIndex, 1);
+
+    try {
+      const statusText = new BotMessageText();
+
+      if (data === 'custom_msg_cancel') {
+        statusText.addLine(BotMessageText.bold(`❌ Надсилання скасовано`));
+      } else {
+        const result = await this.sendMessageToAllEnabledGroups(draft.text);
+
+        if (result.isSkippedByGlobalGate) {
+          statusText.addLine(BotMessageText.bold(`❌ Не надіслано: глобальна відправка вимкнена`));
+        } else {
+          statusText.addLine(BotMessageText.bold(`✅ Надіслано в групи: ${result.sentGroupCount}`));
+          if (result.failedGroupCount) {
+            statusText.addLine(`⚠️ Помилок: ${result.failedGroupCount}`);
+          }
+          if (result.skippedGroupCount) {
+            statusText.addLine(`➖ Пропущено вимкнених груп: ${result.skippedGroupCount}`);
+          }
+        }
+      }
+
+      await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
+        callback_query_id: callbackQuery.id,
+      });
+
+      // The message is already sent at this point, so a failed preview update must not be reported as a failure
+      try {
+        await this.editMessageText(chatId, messageId, statusText);
+      } catch (e) {
+        const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
+        this.logger.warn(`Custom message callback: Failed to update preview: ${errorMessage}`);
+      }
+
+      this.logger.debug(`Custom message callback: Finished (data=${data})`);
+    } catch (e) {
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
+      this.logger.error(`Custom message callback failed: ${errorMessage}`);
       await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
         callback_query_id: callbackQuery.id,
         text: errorMessage,

@@ -40,7 +40,8 @@ export class EshopService implements OnApplicationBootstrap {
           .newLine()
           .newLine()
           .addLine(`Мерщій замовляти:`)
-          .add(BotMessageText.link({ url: product.offers.url }, product.name)).add(`, ${product.offers.price} ${product.offers.priceCurrency}`);
+          .add(BotMessageText.link(product.offers.url, product.name))
+          .add(`, ${product.offers.price} ${product.offers.priceCurrency}`);
         this.botService.sendPhotoToEshop(product.image, text);
         return;
       }
@@ -64,11 +65,14 @@ export class EshopService implements OnApplicationBootstrap {
         };
       });
       
-      const text = new BotMessageText(BotMessageText.link({ url: products[0].offers.url }, products[0].name))
+      const text = new BotMessageText(BotMessageText.link(products[0].offers.url, products[0].name))
         .addLine(`${products[0].offers.price} ${products[0].offers.priceCurrency}`)
         .newLine();
       for (const size of sizesAvailability) {
-        text.addLine(`${BotMessageText.bold(BotMessageText.inlineCode(size.size))}: ${size.isAvailable ? `В наявності` : `Немає в наявності 🙅‍♀️😞`}`);
+        text.addLine([
+          BotMessageText.bold(BotMessageText.inlineCode(size.size)),
+          `: ${size.isAvailable ? `В наявності` : `Немає в наявності 🙅‍♀️😞`}`,
+        ]);
 
         if (this.productSize === size.size) {
           text.prependToLastLine(` (відстежується)`);
