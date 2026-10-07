@@ -500,7 +500,7 @@ export class BotService implements OnApplicationBootstrap {
       } catch (e) {
         result.failedGroupCount++;
 
-        const message = `Failed to send message to group`;
+        const message = `Failed to send message to group (id=${group.id}, comment=${group.comment})`;
         this.logger.error(message);
         this.logger.error(e);
         this.logger.debug({ group });
