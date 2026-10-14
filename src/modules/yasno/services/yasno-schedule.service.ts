@@ -181,25 +181,17 @@ export class YasnoScheduleService
     houseId: number,
   ): Promise<YasnoGroupResponse | null> {
     const url = `${YASNO_API}/addresses/v2/group`;
-    try {
-      const { data } = await firstValueFrom(
-        this.httpService.get<YasnoGroupResponse>(url, {
-          params: {
-            regionId: this.regionId,
-            streetId,
-            houseId,
-            dsoId: this.dsoId,
-          },
-        }),
-      );
-      return data ?? null;
-    } catch (error) {
-      this.logger.error(`Yasno: Failed to fetch group: ${(error as Error).message}`);
-      void this.botService.sendMessageToOwner(
-        new BotMessageText(`Yasno: Failed to fetch group: ${(error as Error).message}`),
-      );
-      return null;
-    }
+    const { data } = await firstValueFrom(
+      this.httpService.get<YasnoGroupResponse>(url, {
+        params: {
+          regionId: this.regionId,
+          streetId,
+          houseId,
+          dsoId: this.dsoId,
+        },
+      }),
+    );
+    return data ?? null;
   }
 
   private async fetchPlannedOutages(): Promise<YasnoPlannedOutages> {
