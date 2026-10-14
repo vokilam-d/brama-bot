@@ -78,6 +78,7 @@ interface DtekFetchResult {
 
 const INCAPSULA_WAIT_MS = 4000;
 const GET_HOME_NUM_TIMEOUT_MS = 30_000;
+const ERROR_EXCERPT_MAX_LENGTH = 500;
 
 @Injectable()
 export class DtekScheduleService
@@ -180,17 +181,21 @@ export class DtekScheduleService
 
       await new Promise((r) => setTimeout(r, INCAPSULA_WAIT_MS));
 
+      // Indirect eval, since variables declared with `let`/`const` are not accessible any other way
+      const isDisconScheduleAvailable = await page.evaluate(() => (0, eval)('typeof DisconSchedule !== "undefined"') as boolean);
+      if (!isDisconScheduleAvailable) {
+        const html = await page.content();
+        this.logger.error(`DisconSchedule is not available, full html: ${html}`);
+        throw new Error(`DisconSchedule is not available (html excerpt=${this.excerpt(html)})`);
+      }
+
       const evaluatePromise = page.evaluate(
-        ({ street }) => {
+        ({ street, maxLength }) => {
           return new Promise((resolve, reject) => {
-            // Indirect eval, since variables declared with `let`/`const` are not accessible any other way
             const ds: DisconSchedule = (0, eval)('typeof DisconSchedule !== "undefined" ? DisconSchedule : null');
-            if (!ds) {
-              reject(new Error(`DisconSchedule is not available (html=${document.documentElement.outerHTML})`));
-              return;
-            }
             if (!ds?.ajax?.url) {
-              reject(new Error(`DisconSchedule.ajax not available. (ds=${JSON.stringify(ds)})`));
+              const dsJson = JSON.stringify(ds) ?? '';
+              reject(new Error(`DisconSchedule.ajax not available. (ds=${dsJson.slice(0, maxLength)})`));
               return;
             }
             ds.ajax.obj.method = 'getHomeNum';
@@ -207,7 +212,7 @@ export class DtekScheduleService
             );
           });
         },
-        { street: this.street },
+        { street: this.street, maxLength: ERROR_EXCERPT_MAX_LENGTH },
       );
 
       const timeoutPromise = new Promise<never>((_, reject) => {
@@ -222,6 +227,13 @@ export class DtekScheduleService
       return payload as DtekFetchResult | null;
     });
     return result;
+  }
+
+  private excerpt(text: string): string {
+    const collapsed = text.replace(/\s+/g, ' ').trim();
+    return collapsed.length > ERROR_EXCERPT_MAX_LENGTH
+      ? `${collapsed.slice(0, ERROR_EXCERPT_MAX_LENGTH)}…`
+      : collapsed;
   }
 
   private dateFromTimestamp(timestamp: string): Date {
