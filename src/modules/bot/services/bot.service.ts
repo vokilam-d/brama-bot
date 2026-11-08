@@ -63,7 +63,6 @@ enum AdminBotCommand {
   EshopGetInfo = '/eshop_info',
   PowerStatusGroup = '/power_status_group',
   GetPowerStatus = '/get_power_status',
-  ScheduleSettings = '/schedule_settings',
   SendMessageToAll = '/send_message_to_all',
 }
 
@@ -128,8 +127,8 @@ export class BotService implements OnApplicationBootstrap {
   private async onNewTelegramCallbackQuery(callbackQuery: ITelegramCallbackQuery): Promise<void> {
     const botConfig = this.botConfigService.getConfig();
     const isOwner = botConfig.ownerIds.includes(callbackQuery.from.id);
-    if (isOwner && callbackQuery.data?.startsWith('schedule_')) {
-      await this.onScheduleSettingsCallback(callbackQuery);
+    if (isOwner && (callbackQuery.data?.startsWith('schedule_') || callbackQuery.data?.startsWith('emergency_'))) {
+      await this.onMenuToggleCallback(callbackQuery);
     }
     if (isOwner && callbackQuery.data?.startsWith('group_')) {
       await this.onGroupSettingsCallback(callbackQuery);
@@ -142,7 +141,7 @@ export class BotService implements OnApplicationBootstrap {
     }
   }
 
-  /** Buttons of the /schedule and /emergency_shutdowns messages. The message stays, so it can be clicked again. */
+  /** Action buttons of the /schedule and /emergency_shutdowns messages. The message stays to be clicked again. */
   private async onActionCallback(callbackQuery: ITelegramCallbackQuery): Promise<void> {
     this.logger.debug(`Action callback (data=${callbackQuery.data})`);
 
@@ -374,39 +373,16 @@ export class BotService implements OnApplicationBootstrap {
         }
 
         case AdminBotCommand.Schedule: {
-          await this.sendMessage(chatId, new BotMessageText(BotMessageText.bold('Графіки')), {
-            replyMarkup: {
-              inline_keyboard: [
-                [
-                  { text: '📥 Отримати сьогодні', callback_data: 'action_schedule_get_today' },
-                  { text: '📥 Отримати завтра', callback_data: 'action_schedule_get_tomorrow' },
-                ],
-                [
-                  { text: '📢 Надіслати сьогодні', callback_data: 'action_schedule_send_today' },
-                  { text: '📢 Надіслати завтра', callback_data: 'action_schedule_send_tomorrow' },
-                ],
-              ],
-            },
+          await this.sendMessage(chatId, this.buildScheduleMenuText(), {
+            replyMarkup: this.buildScheduleMenuKeyboard(),
           });
           break;
         }
 
         case AdminBotCommand.EmergencyShutdowns: {
-          await this.sendMessage(chatId, new BotMessageText(BotMessageText.bold('Екстрені відключення')), {
-            replyMarkup: {
-              inline_keyboard: [[
-                { text: '📥 Отримати', callback_data: 'action_emergency_get' },
-                { text: '📢 Надіслати', callback_data: 'action_emergency_send' },
-              ]],
-            },
+          await this.sendMessage(chatId, this.buildEmergencyShutdownsMenuText(), {
+            replyMarkup: this.buildEmergencyShutdownsMenuKeyboard(),
           });
-          break;
-        }
-
-        case AdminBotCommand.ScheduleSettings: {
-          const scheduleText = this.buildScheduleSettingsText();
-          const scheduleKeyboard = this.buildScheduleSettingsKeyboard();
-          await this.sendMessage(chatId, scheduleText, { replyMarkup: scheduleKeyboard });
           break;
         }
 
@@ -798,47 +774,71 @@ export class BotService implements OnApplicationBootstrap {
     }
   }
 
-  private buildScheduleSettingsText(): BotMessageText {
+  private buildScheduleMenuText(): BotMessageText {
     const sending = this.powerScheduleConfigService.isScheduleSendingEnabled() ? 'ON' : 'OFF';
-    const emergency = this.powerScheduleConfigService.isEmergencyShutdownsSendingEnabled() ? 'ON' : 'OFF';
     const kd =this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Kd) ? 'ON' : 'OFF';
     const dtek = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ? 'ON' : 'OFF';
     const yasno = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno) ? 'ON' : 'OFF';
-    return new BotMessageText(BotMessageText.bold('Графіки: Налаштування'))
+    return new BotMessageText(BotMessageText.bold('Графіки'))
       .newLine()
       .addLine(`Загальне надсилання в групи: ${sending}`)
-      .addLine(`Екстрені відключення в групи: ${emergency}`)
-      .addLine(`KD: ${kd} | DTEK: ${dtek} | Yasno: ${yasno}`)
-      .newLine()
-      .addLine('Натисніть кнопку, щоб перемкнути.');
+      .addLine(`KD: ${kd} | DTEK: ${dtek} | Yasno: ${yasno}`);
   }
 
-  private buildScheduleSettingsKeyboard(): ITelegramInlineKeyboardMarkup {
+  private buildScheduleMenuKeyboard(): ITelegramInlineKeyboardMarkup {
     const btn = (label: string, data: string): ITelegramInlineKeyboardButton => ({
       text: label,
       callback_data: data,
     });
     const sending = this.powerScheduleConfigService.isScheduleSendingEnabled() ? '✅ Загальне' : '❌ Загальне';
-    const emergency = this.powerScheduleConfigService.isEmergencyShutdownsSendingEnabled()
-      ? '✅ Екстрені'
-      : '❌ Екстрені';
     const kd = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Kd) ? '✅ KD' : '❌ KD';
     const dtek = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ? '✅ DTEK' : '❌ DTEK';
     const yasno = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno) ? '✅ Yasno' : '❌ Yasno';
     return {
       inline_keyboard: [
-        [btn(sending, 'schedule_toggle_sending'), btn(emergency, 'schedule_toggle_emergency')],
+        [
+          btn('📥 Отримати сьогодні', 'action_schedule_get_today'),
+          btn('📥 Отримати завтра', 'action_schedule_get_tomorrow'),
+        ],
+        [
+          btn('📢 Надіслати сьогодні', 'action_schedule_send_today'),
+          btn('📢 Надіслати завтра', 'action_schedule_send_tomorrow'),
+        ],
+        [btn(sending, 'schedule_toggle_sending')],
         [btn(kd, 'schedule_toggle_kd'), btn(dtek, 'schedule_toggle_dtek'), btn(yasno, 'schedule_toggle_yasno')],
       ],
     };
   }
 
-  private async onScheduleSettingsCallback(callbackQuery: ITelegramCallbackQuery): Promise<void> {
-    this.logger.debug(`Schedule settings callback (data=${callbackQuery.data})`);
+  private buildEmergencyShutdownsMenuText(): BotMessageText {
+    const sending = this.powerScheduleConfigService.isEmergencyShutdownsSendingEnabled() ? 'ON' : 'OFF';
+    return new BotMessageText(BotMessageText.bold('Екстрені відключення'))
+      .newLine()
+      .addLine(`Надсилання в групи: ${sending}`);
+  }
+
+  private buildEmergencyShutdownsMenuKeyboard(): ITelegramInlineKeyboardMarkup {
+    const sending = this.powerScheduleConfigService.isEmergencyShutdownsSendingEnabled()
+      ? '✅ Надсилання в групи'
+      : '❌ Надсилання в групи';
+    return {
+      inline_keyboard: [
+        [
+          { text: '📥 Отримати', callback_data: 'action_emergency_get' },
+          { text: '📢 Надіслати', callback_data: 'action_emergency_send' },
+        ],
+        [{ text: sending, callback_data: 'emergency_toggle_sending' }],
+      ],
+    };
+  }
+
+  /** Toggle buttons of the /schedule and /emergency_shutdowns messages; the message is re-rendered in place. */
+  private async onMenuToggleCallback(callbackQuery: ITelegramCallbackQuery): Promise<void> {
+    this.logger.debug(`Menu toggle callback (data=${callbackQuery.data})`);
 
     const data = callbackQuery.data;
     if (!data) {
-      this.logger.debug(`Schedule settings callback: Exiting, no data (data=${callbackQuery.data})`);
+      this.logger.debug(`Menu toggle callback: Exiting, no data (data=${callbackQuery.data})`);
       return;
     }
     const providerIdByData: Record<string, PowerScheduleProviderId> = {
@@ -847,14 +847,16 @@ export class BotService implements OnApplicationBootstrap {
       schedule_toggle_yasno: PowerScheduleProviderId.Yasno,
     };
     try {
+      let isEmergencyMenu = false;
       if (data === 'schedule_toggle_sending') {
         await this.powerScheduleConfigService.toggleScheduleSendingEnabled();
-      } else if (data === 'schedule_toggle_emergency') {
-        await this.powerScheduleConfigService.toggleEmergencyShutdownsSendingEnabled();
       } else if (providerIdByData[data]) {
         await this.powerScheduleConfigService.toggleProviderEnabled(providerIdByData[data]);
+      } else if (data === 'emergency_toggle_sending') {
+        await this.powerScheduleConfigService.toggleEmergencyShutdownsSendingEnabled();
+        isEmergencyMenu = true;
       } else {
-        this.logger.debug(`Schedule settings callback: Exiting, invalid data (data=${callbackQuery.data})`);
+        this.logger.debug(`Menu toggle callback: Exiting, invalid data (data=${callbackQuery.data})`);
         return;
       }
 
@@ -864,14 +866,14 @@ export class BotService implements OnApplicationBootstrap {
       await this.editMessageText(
         callbackQuery.message.chat.id,
         callbackQuery.message.message_id,
-        this.buildScheduleSettingsText(),
-        this.buildScheduleSettingsKeyboard(),
+        isEmergencyMenu ? this.buildEmergencyShutdownsMenuText() : this.buildScheduleMenuText(),
+        isEmergencyMenu ? this.buildEmergencyShutdownsMenuKeyboard() : this.buildScheduleMenuKeyboard(),
       );
 
-      this.logger.debug(`Schedule settings callback: Finished (data=${callbackQuery.data})`);
+      this.logger.debug(`Menu toggle callback: Finished (data=${callbackQuery.data})`);
     } catch (e) {
       const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
-      this.logger.error(`Schedule settings callback failed: ${errorMessage}`);
+      this.logger.error(`Menu toggle callback failed: ${errorMessage}`);
       await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
         callback_query_id: callbackQuery.id,
         text: errorMessage,
