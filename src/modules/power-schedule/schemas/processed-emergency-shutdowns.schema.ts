@@ -11,6 +11,10 @@ export class ProcessedEmergencyShutdowns {
   @Prop({ required: true })
   isActive: boolean;
 
+  /** Outage group the state was reported for, e.g. `35.1`. */
+  @Prop()
+  groupKey?: string;
+
   /**
    * Latest time the state was reported in effect: the provider's own update time, or the check
    * time for a provider that has none.

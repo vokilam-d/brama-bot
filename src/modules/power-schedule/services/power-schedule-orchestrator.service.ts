@@ -51,6 +51,18 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
         this.sendScheduleToChat(options.day, undefined, true).then();
       },
     );
+    this.botService.events.on(
+      PendingMessageType.GetEmergencyShutdowns,
+      (options: { chatId: number }) => {
+        this.sendEmergencyShutdownsToChat(options.chatId).then();
+      },
+    );
+    this.botService.events.on(
+      PendingMessageType.SendEmergencyShutdownsToAll,
+      () => {
+        this.sendEmergencyShutdownsToChat(undefined, true).then();
+      },
+    );
   }
 
   /**
@@ -81,10 +93,11 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     providerId: PowerScheduleProviderId,
     isActive: boolean,
     updatedAt: Date,
+    groupKey?: string,
   ): Promise<void> {
     await this.withDateMutex(
       EMERGENCY_SHUTDOWNS_MUTEX_KEY,
-      () => this.handleEmergencyShutdownsChange(providerId, isActive, updatedAt),
+      () => this.handleEmergencyShutdownsChange(providerId, isActive, updatedAt, groupKey),
     );
   }
 
@@ -92,10 +105,11 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     providerId: PowerScheduleProviderId,
     isActive: boolean,
     updatedAt: Date,
+    groupKey?: string,
   ): Promise<void> {
     const prevProcessed = await this.processedEmergencyShutdownsModel.findOne().lean().exec();
-    const messageText = buildEmergencyShutdownsMessage(providerId, isActive);
-    const processed: ProcessedEmergencyShutdowns = { providerId, isActive, updatedAt };
+    const messageText = buildEmergencyShutdownsMessage(providerId, isActive, groupKey);
+    const processed: ProcessedEmergencyShutdowns = { providerId, isActive, groupKey, updatedAt };
     const logParams = `providerId=${providerId}, isActive=${isActive}, updatedAt=${updatedAt.toISOString()}`;
 
     if (prevProcessed?.isActive === isActive) {
@@ -340,6 +354,46 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       } else {
         void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send schedule to groups, but sending is disabled (${prevProcessed.providerId}, ${dateIso}) text:\n\n${messageText.toString()}`));
       }
+    }
+  }
+
+  private async sendEmergencyShutdownsToChat(chatId?: number, sendToGroups = false): Promise<void> {
+    this.logger.debug(`Sending emergency shutdowns to chat... (chatId=${chatId}, sendToGroups=${sendToGroups})`);
+
+    try {
+      const prevProcessed = await this.processedEmergencyShutdownsModel.findOne().lean().exec();
+      if (!prevProcessed) {
+        const message = `Sending emergency shutdowns to chat: Failed: No emergency shutdowns state available (chatId=${chatId}, sendToGroups=${sendToGroups})`;
+        this.logger.warn(message);
+        void this.botService.sendMessageToOwner(new BotMessageText(message));
+        return;
+      }
+
+      const { providerId, isActive, groupKey, updatedAt } = prevProcessed;
+      const messageText = buildEmergencyShutdownsMessage(providerId, isActive, groupKey);
+
+      if (chatId !== undefined) {
+        await this.botService.sendMessage(chatId, messageText);
+      } else if (sendToGroups) {
+        if (this.powerScheduleConfigService.isScheduleSendingEnabled()) {
+          // await this.botService.sendMessageToAllEnabledGroups(messageText);
+
+          const ownerMessageText = new BotMessageText()
+            .addLine(`Sent (${providerId}, updated ${updatedAt.toISOString()})`)
+            .newLine()
+            .merge(messageText);
+
+          ownerMessageText.newLine().addLine(`NOT SENT, DISABLED`);
+          
+          void this.botService.sendMessageToOwner(ownerMessageText);
+        } else {
+          void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send emergency shutdowns to groups, but sending is disabled (${providerId}) text:\n\n${messageText.toString()}`));
+        }
+      }
+    } catch (e) {
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
+      this.logger.error(`Sending emergency shutdowns to chat: Failed: ${errorMessage}`);
+      void this.botService.sendMessageToOwner(new BotMessageText(`Failed to send emergency shutdowns: ${errorMessage}`));
     }
   }
 }

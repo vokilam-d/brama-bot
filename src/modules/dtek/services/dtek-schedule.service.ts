@@ -118,7 +118,8 @@ export class DtekScheduleService
     }
 
     const { response, fact, isEmergencyShutdowns } = payload;
-    return { schedules: this.buildSchedules(response, fact), isEmergencyShutdowns };
+    const emergencyShutdownsGroupKey = response.data?.[this.building]?.sub_type_reason?.[0]?.replace(/^GPV/, '');
+    return { schedules: this.buildSchedules(response, fact), isEmergencyShutdowns, emergencyShutdownsGroupKey };
   }
 
   private buildSchedules(response: DtekGetHomeNumResponse, fact?: DtekFactPayload): INormalizedSchedule[] {

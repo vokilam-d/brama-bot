@@ -35,6 +35,8 @@ export enum PendingMessageType {
   AskForCode = 'askForCode',
   GetSchedule = 'getSchedule',
   SendScheduleToAll = 'sendScheduleToAll',
+  GetEmergencyShutdowns = 'getEmergencyShutdowns',
+  SendEmergencyShutdownsToAll = 'sendEmergencyShutdownsToAll',
   EshopSubscribe = 'eshopSubscribe',
   EshopUnsubscribe = 'eshopUnsubscribe',
   EshopGetInfo = 'eshopGetInfo',
@@ -52,10 +54,8 @@ const IGNORE_UNMENTIONED_CHAT_ID = -1003708538221;
 
 enum AdminBotCommand {
   GroupsSettings = '/groups_settings',
-  SendScheduleTodayToAll = '/send_schedule_today_to_all',
-  SendScheduleTomorrowToAll = '/send_schedule_tomorrow_to_all',
-  GetScheduleToday = '/get_schedule_today',
-  GetScheduleTomorrow = '/get_schedule_tomorrow',
+  Schedule = '/schedule',
+  EmergencyShutdowns = '/emergency_shutdowns',
   GetCommands = '/get_commands',
   DeleteMessages = '/del',
   EshopSubscribe = '/eshop_subscribe',
@@ -136,6 +136,53 @@ export class BotService implements OnApplicationBootstrap {
     }
     if (isOwner && callbackQuery.data?.startsWith('custom_msg_')) {
       await this.onCustomMessageCallback(callbackQuery);
+    }
+    if (isOwner && callbackQuery.data?.startsWith('action_')) {
+      await this.onActionCallback(callbackQuery);
+    }
+  }
+
+  /** Buttons of the /schedule and /emergency_shutdowns messages. The message stays, so it can be clicked again. */
+  private async onActionCallback(callbackQuery: ITelegramCallbackQuery): Promise<void> {
+    this.logger.debug(`Action callback (data=${callbackQuery.data})`);
+
+    const chatId = callbackQuery.message?.chat.id;
+    let answerText: string | undefined;
+
+    switch (callbackQuery.data) {
+      case 'action_schedule_get_today':
+      case 'action_schedule_get_tomorrow': {
+        const day = callbackQuery.data.endsWith('today') ? 'today' : 'tomorrow';
+        this.events.emit(PendingMessageType.GetSchedule, { day, chatId });
+        break;
+      }
+      case 'action_schedule_send_today':
+      case 'action_schedule_send_tomorrow': {
+        const day = callbackQuery.data.endsWith('today') ? 'today' : 'tomorrow';
+        this.events.emit(PendingMessageType.SendScheduleToAll, { day });
+        answerText = 'Надсилаю в групи';
+        break;
+      }
+      case 'action_emergency_get':
+        this.events.emit(PendingMessageType.GetEmergencyShutdowns, { chatId });
+        break;
+      case 'action_emergency_send':
+        this.events.emit(PendingMessageType.SendEmergencyShutdownsToAll);
+        answerText = 'Надсилаю в групи';
+        break;
+      default:
+        this.logger.debug(`Action callback: Exiting, invalid data (data=${callbackQuery.data})`);
+        return;
+    }
+
+    try {
+      await this.telegramApiService.execMethod(ApiMethodName.AnswerCallbackQuery, {
+        callback_query_id: callbackQuery.id,
+        text: answerText,
+      });
+    } catch (e) {
+      const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
+      this.logger.warn(`Action callback: Failed to answer callback query: ${errorMessage}`);
     }
   }
 
@@ -326,25 +373,33 @@ export class BotService implements OnApplicationBootstrap {
           break;
         }
 
-        case AdminBotCommand.GetScheduleToday: {
-          this.events.emit(PendingMessageType.GetSchedule, { day: 'today', chatId });
+        case AdminBotCommand.Schedule: {
+          await this.sendMessage(chatId, new BotMessageText(BotMessageText.bold('Графіки')), {
+            replyMarkup: {
+              inline_keyboard: [
+                [
+                  { text: '📥 Отримати сьогодні', callback_data: 'action_schedule_get_today' },
+                  { text: '📥 Отримати завтра', callback_data: 'action_schedule_get_tomorrow' },
+                ],
+                [
+                  { text: '📢 Надіслати сьогодні', callback_data: 'action_schedule_send_today' },
+                  { text: '📢 Надіслати завтра', callback_data: 'action_schedule_send_tomorrow' },
+                ],
+              ],
+            },
+          });
           break;
         }
 
-        case AdminBotCommand.GetScheduleTomorrow: {
-          this.events.emit(PendingMessageType.GetSchedule, { day: 'tomorrow', chatId });
-          break;
-        }
-
-        case AdminBotCommand.SendScheduleTodayToAll: {
-          this.events.emit(PendingMessageType.SendScheduleToAll, { day: 'today' });
-          await this.likeMessage(chatId, message.message_id);
-          break;
-        }
-
-        case AdminBotCommand.SendScheduleTomorrowToAll: {
-          this.events.emit(PendingMessageType.SendScheduleToAll, { day: 'tomorrow' });
-          await this.likeMessage(chatId, message.message_id);
+        case AdminBotCommand.EmergencyShutdowns: {
+          await this.sendMessage(chatId, new BotMessageText(BotMessageText.bold('Екстрені відключення')), {
+            replyMarkup: {
+              inline_keyboard: [[
+                { text: '📥 Отримати', callback_data: 'action_emergency_get' },
+                { text: '📢 Надіслати', callback_data: 'action_emergency_send' },
+              ]],
+            },
+          });
           break;
         }
 

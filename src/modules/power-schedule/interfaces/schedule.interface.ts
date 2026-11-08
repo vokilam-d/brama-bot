@@ -68,6 +68,8 @@ export interface IPowerScheduleFetchResult {
   isEmergencyShutdowns: boolean | null;
   /** When the provider last updated `isEmergencyShutdowns`; the check time is used when omitted. */
   emergencyShutdownsUpdatedAt?: Date;
+  /** Outage group the emergency shutdowns state was read for, e.g. `35.1`. */
+  emergencyShutdownsGroupKey?: string;
 }
 
 export enum PowerScheduleProviderId {

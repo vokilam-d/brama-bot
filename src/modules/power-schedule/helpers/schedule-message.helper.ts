@@ -22,6 +22,7 @@ export function buildScheduleSourceLine(providerId: PowerScheduleProviderId, gro
 export function buildEmergencyShutdownsMessage(
   providerId: PowerScheduleProviderId,
   isActive: boolean,
+  groupKey?: string,
 ): BotMessageText {
   const messageText = new BotMessageText()
     .addLine(BotMessageText.bold(isActive
@@ -31,7 +32,7 @@ export function buildEmergencyShutdownsMessage(
   if (isActive) {
     messageText.addLine(`Графіки відключень не діють.`).newLine();
   }
-  return messageText.add(BotMessageText.italic(buildScheduleSourceLine(providerId)));
+  return messageText.add(BotMessageText.italic(buildScheduleSourceLine(providerId, groupKey)));
 }
 
 export function buildDayScheduleMessage(
