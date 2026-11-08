@@ -5,6 +5,7 @@ import { BasePowerScheduleProvider } from '../../power-schedule/base/base-power-
 import { normalizeScheduleDate } from '../../power-schedule/helpers/normalize-schedule-date.helper';
 import {
   INormalizedSchedule,
+  IPowerScheduleFetchResult,
   PowerScheduleProviderId,
   type IScheduleItemHours
 } from '../../power-schedule/interfaces/schedule.interface';
@@ -74,11 +75,14 @@ interface DtekGetHomeNumResponse {
 interface DtekFetchResult {
   response: DtekGetHomeNumResponse;
   fact?: DtekFactPayload;
+  isEmergencyShutdowns: boolean;
 }
 
 const INCAPSULA_WAIT_MS = 4000;
 const GET_HOME_NUM_TIMEOUT_MS = 30_000;
 const ERROR_EXCERPT_MAX_LENGTH = 500;
+/** Text of the attention popup DTEK shows while emergency shutdowns are in effect. */
+const EMERGENCY_SHUTDOWNS_TEXT = 'введені екстрені відключення електроенергії';
 
 @Injectable()
 export class DtekScheduleService
@@ -106,14 +110,18 @@ export class DtekScheduleService
     return false;
   }
 
-  override async fetchSchedules(): Promise<INormalizedSchedule[]> {
+  override async fetchSchedules(): Promise<IPowerScheduleFetchResult> {
     const payload = await this.fetchDtekPagePayload();
     if (!payload) {
       this.logger.warn('fetchSchedules: returning [] (no payload)');
-      return [];
+      return { schedules: [], isEmergencyShutdowns: null };
     }
 
-    const { response, fact } = payload;
+    const { response, fact, isEmergencyShutdowns } = payload;
+    return { schedules: this.buildSchedules(response, fact), isEmergencyShutdowns };
+  }
+
+  private buildSchedules(response: DtekGetHomeNumResponse, fact?: DtekFactPayload): INormalizedSchedule[] {
     if (!response.result) {
       this.logger.warn(`DTEK response missing result flag`);
       return [];
@@ -160,7 +168,7 @@ export class DtekScheduleService
       }
 
       const date = this.dateFromTimestamp(dateKey);
-      schedules.push({ date, hours });
+      schedules.push({ date, hours, groupKey: groupKey.replace(/^GPV/, '') });
     });
 
     return schedules;
@@ -188,6 +196,11 @@ export class DtekScheduleService
         this.logger.error(`DisconSchedule is not available, full html: ${html}`);
         throw new Error(`DisconSchedule is not available (html excerpt=${this.excerpt(html)})`);
       }
+
+      const isEmergencyShutdowns = await page.evaluate((text) => {
+        const popupText = document.querySelector('#modal-attention')?.textContent ?? '';
+        return popupText.replace(/\s+/g, ' ').toLowerCase().includes(text);
+      }, EMERGENCY_SHUTDOWNS_TEXT);
 
       const evaluatePromise = page.evaluate(
         ({ street, maxLength }) => {
@@ -224,7 +237,7 @@ export class DtekScheduleService
 
       const payload = await Promise.race([evaluatePromise, timeoutPromise]);
 
-      return payload as DtekFetchResult | null;
+      return { ...(payload as Omit<DtekFetchResult, 'isEmergencyShutdowns'>), isEmergencyShutdowns };
     });
     return result;
   }

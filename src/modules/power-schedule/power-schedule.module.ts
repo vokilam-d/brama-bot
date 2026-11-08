@@ -3,6 +3,10 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { BotModule } from '../bot/bot.module';
 import { ProcessedScheduleInfo, ProcessedScheduleInfoSchema } from './schemas/processed-schedule-info.schema';
 import {
+  ProcessedEmergencyShutdowns,
+  ProcessedEmergencyShutdownsSchema,
+} from './schemas/processed-emergency-shutdowns.schema';
+import {
   PowerScheduleConfig,
   PowerScheduleConfigSchema,
 } from './schemas/power-schedule-config.schema';
@@ -15,6 +19,10 @@ import { PowerScheduleOrchestratorService } from './services/power-schedule-orch
       {
         name: ProcessedScheduleInfo.name,
         schema: ProcessedScheduleInfoSchema,
+      },
+      {
+        name: ProcessedEmergencyShutdowns.name,
+        schema: ProcessedEmergencyShutdownsSchema,
       },
       {
         name: PowerScheduleConfig.name,

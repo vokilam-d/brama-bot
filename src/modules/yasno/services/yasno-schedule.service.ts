@@ -9,6 +9,7 @@ import { firstValueFrom } from 'rxjs';
 import { CONFIG } from '../../../config';
 import {
   INormalizedSchedule,
+  IPowerScheduleFetchResult,
   PowerScheduleProviderId,
   type IScheduleItemHours,
 } from '../../power-schedule/interfaces/schedule.interface';
@@ -38,7 +39,7 @@ interface YasnoGroupResponse {
 interface YasnoDaySchedule {
   slots: YasnoSlot[];
   date: string;
-  status: string;
+  status: 'ScheduleApplies' | 'EmergencyShutdowns';
 }
 
 interface YasnoGroupSchedule {
@@ -75,10 +76,10 @@ export class YasnoScheduleService
     return false;
   }
 
-  override async fetchSchedules(): Promise<INormalizedSchedule[]> {
+  override async fetchSchedules(): Promise<IPowerScheduleFetchResult> {
     const groupKey = await this.resolveGroupKey();
     if (!groupKey) {
-      return [];
+      return { schedules: [], isEmergencyShutdowns: null };
     }
 
     const planned = await this.fetchPlannedOutages();
@@ -87,7 +88,7 @@ export class YasnoScheduleService
       this.logger.error(`Yasno: No schedule for group ${groupKey} in planned-outages`);
       this.logger.debug(planned);
       void this.botService.sendMessageToOwner(new BotMessageText(`Yasno: No schedule for group ${groupKey} in planned-outages`));
-      return [];
+      return { schedules: [], isEmergencyShutdowns: null };
     }
 
     const schedules: INormalizedSchedule[] = [];
@@ -104,10 +105,13 @@ export class YasnoScheduleService
 
       const hours = normalizeYasnoSlots(dayData.slots);
       const date = normalizeScheduleDate(new Date(dayData.date));
-      schedules.push({ date, hours });
+      schedules.push({ date, hours, groupKey });
     }
 
-    return schedules;
+    const todayStatus = groupSchedule.today?.status;
+    const isEmergencyShutdowns = todayStatus ? todayStatus === 'EmergencyShutdowns' : null;
+
+    return { schedules, isEmergencyShutdowns };
   }
 
   private async resolveGroupKey(): Promise<string | null> {

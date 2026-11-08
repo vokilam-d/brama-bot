@@ -10,14 +10,17 @@ import {
   PowerScheduleProviderId,
 } from '../interfaces/schedule.interface';
 import { ProcessedScheduleInfo } from '../schemas/processed-schedule-info.schema';
+import { ProcessedEmergencyShutdowns } from '../schemas/processed-emergency-shutdowns.schema';
 import {
   buildDayScheduleMessage,
+  buildEmergencyShutdownsMessage,
   buildScheduleSourceLine,
   buildScheduleTitleLine,
 } from '../helpers/schedule-message.helper';
 import { normalizeScheduleDate } from '../helpers/normalize-schedule-date.helper';
 
 const SEND_TO_GROUPS_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+const EMERGENCY_SHUTDOWNS_MUTEX_KEY = 'emergency-shutdowns';
 
 @Injectable()
 export class PowerScheduleOrchestratorService implements OnApplicationBootstrap {
@@ -27,6 +30,8 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
 
   constructor(
     @InjectModel(ProcessedScheduleInfo.name) private processedScheduleInfoModel: Model<ProcessedScheduleInfo>,
+    @InjectModel(ProcessedEmergencyShutdowns.name)
+    private processedEmergencyShutdownsModel: Model<ProcessedEmergencyShutdowns>,
     private readonly botService: BotService,
     private readonly powerScheduleConfigService: PowerScheduleConfigService,
   ) {}
@@ -63,6 +68,42 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       dateIso,
       () => this.handleScheduleChange(providerId, dateIso, normalizedDate, normalizedSchedule),
     );
+  }
+
+  /**
+   * Called by a provider when it sees emergency shutdowns start or end. The state is shared by all
+   * providers, so a state another provider already sent is skipped. Serialized like schedules, so
+   * two providers reporting at once don't both send.
+   */
+  async onEmergencyShutdownsChange(providerId: PowerScheduleProviderId, isActive: boolean): Promise<void> {
+    await this.withDateMutex(
+      EMERGENCY_SHUTDOWNS_MUTEX_KEY,
+      () => this.handleEmergencyShutdownsChange(providerId, isActive),
+    );
+  }
+
+  private async handleEmergencyShutdownsChange(providerId: PowerScheduleProviderId, isActive: boolean): Promise<void> {
+    const prevProcessed = await this.processedEmergencyShutdownsModel.findOne().lean().exec();
+    const messageText = buildEmergencyShutdownsMessage(providerId, isActive);
+
+    if (prevProcessed?.isActive === isActive) {
+      this.logger.debug(`Emergency shutdowns change ignored (not changed): providerId=${providerId}, isActive=${isActive}`);
+      void this.botService.sendMessageToOwner(
+        new BotMessageText().addLine(`Skipped (${providerId}): `).newLine().merge(messageText),
+      );
+      return;
+    }
+
+    if (!prevProcessed && !isActive) {
+      this.logger.debug(`Emergency shutdowns not active, nothing to send: providerId=${providerId}`);
+    } else {
+      // Owner only while the detection is being verified, then all enabled groups
+      void this.botService.sendMessageToOwner(messageText);
+      this.logger.debug(`Emergency shutdowns change sent: providerId=${providerId}, isActive=${isActive}`);
+    }
+
+    const processed: ProcessedEmergencyShutdowns = { providerId, isActive, updatedAt: new Date() };
+    await this.processedEmergencyShutdownsModel.findOneAndReplace({}, processed, { upsert: true });
   }
 
   private async withDateMutex<T>(dateIso: string, fn: () => Promise<T>): Promise<T> {
@@ -106,8 +147,9 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       normalizedDate,
       !prevProcessed,
       normalizedSchedule.hours,
+      normalizedSchedule.groupKey,
     );
-    await this.deliverScheduleToGroups(providerId, dateIso, messageText, normalizedSchedule.hours);
+    await this.deliverScheduleToGroups(providerId, dateIso, messageText, normalizedSchedule);
     this.logger.debug(`Schedule sent: dateIso=${dateIso}, providerId=${providerId}`);
   }
 
@@ -122,7 +164,13 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       .addLine(`Skipped (${providerId}, ${dateIso}): `)
       .newLine()
       .merge(
-        this.buildScheduleMessageText(providerId, normalizedDate, false, normalizedSchedule.hours),
+        this.buildScheduleMessageText(
+          providerId,
+          normalizedDate,
+          false,
+          normalizedSchedule.hours,
+          normalizedSchedule.groupKey,
+        ),
       )
     void this.botService.sendMessageToOwner(messageText);
   }
@@ -132,26 +180,27 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     normalizedDate: Date,
     isFirstScheduleForDay: boolean,
     scheduleItemHours: IScheduleItemHours,
+    groupKey?: string,
   ): BotMessageText {
     return new BotMessageText()
       .addLine(BotMessageText.bold(buildScheduleTitleLine(normalizedDate, isFirstScheduleForDay)))
       .newLine()
       .merge(buildDayScheduleMessage(scheduleItemHours))
       .newLine()
-      .add(BotMessageText.italic(buildScheduleSourceLine(providerId)));
+      .add(BotMessageText.italic(buildScheduleSourceLine(providerId, groupKey)));
   }
 
   private async deliverScheduleToGroups(
     providerId: PowerScheduleProviderId,
     dateIso: string,
     messageText: BotMessageText,
-    scheduleItemHours: IScheduleItemHours,
+    normalizedSchedule: INormalizedSchedule,
   ): Promise<void> {
     if (!this.powerScheduleConfigService.isScheduleSendingEnabled()) {
       void this.botService.sendMessageToOwner(
         new BotMessageText(`Tried to send schedule, but sending is disabled (${providerId}, ${dateIso}) text:\n\n${messageText.toString()}`),
       );
-      await this.persistProcessed(providerId, dateIso, new Date(), scheduleItemHours);
+      await this.persistProcessed(providerId, dateIso, new Date(), normalizedSchedule);
       return;
     }
 
@@ -176,24 +225,25 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
         .merge(messageText);
       void this.botService.sendMessageToOwner(ownerMessageText);
     }
-    await this.persistProcessed(providerId, dateIso, new Date(), scheduleItemHours);
+    await this.persistProcessed(providerId, dateIso, new Date(), normalizedSchedule);
   }
 
   private async persistProcessed(
     providerId: PowerScheduleProviderId,
     dateIso: string,
     updatedAt: Date,
-    scheduleItemHours: IScheduleItemHours,
+    normalizedSchedule: INormalizedSchedule,
   ): Promise<void> {
     const scheduleInfo: ProcessedScheduleInfo = {
       dateIso,
       providerId,
       updatedAt,
-      scheduleItemHours,
+      scheduleItemHours: normalizedSchedule.hours,
+      groupKey: normalizedSchedule.groupKey,
     };
     const dateInfoKey: keyof ProcessedScheduleInfo = 'dateIso';
 
-    await this.processedScheduleInfoModel.findOneAndUpdate(
+    await this.processedScheduleInfoModel.findOneAndReplace(
       { [dateInfoKey]: dateIso },
       scheduleInfo,
       { upsert: true },
@@ -231,6 +281,7 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       date,
       true,
       prevProcessed.scheduleItemHours,
+      prevProcessed.groupKey,
     );
 
     if (chatId !== undefined) {

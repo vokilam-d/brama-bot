@@ -7,6 +7,7 @@ import {
 import { CONFIG } from '../../../config';
 import {
   INormalizedSchedule,
+  IPowerScheduleFetchResult,
   PowerScheduleProviderId,
   PowerState,
   type IScheduleItemHours,
@@ -41,11 +42,13 @@ export class KdScheduleService
     return Object.values(scheduleItemHours).some((s) => s === PowerState.MaybeOff);
   }
 
-  override async fetchSchedules(): Promise<INormalizedSchedule[]> {
+  override async fetchSchedules(): Promise<IPowerScheduleFetchResult> {
     await this.kdService.whenReady();
     const weekSchedule = await this.kdService.getWeekSchedule();
+    // Emergency shutdowns are not detected for Kyiv Digital
+    const isEmergencyShutdowns = null;
     if (!weekSchedule?.length) {
-      return [];
+      return { schedules: [], isEmergencyShutdowns };
     }
 
     const today = normalizeScheduleDate(new Date());
@@ -62,7 +65,7 @@ export class KdScheduleService
       schedules.push({ date, hours: item.hours });
     }
 
-    return schedules;
+    return { schedules, isEmergencyShutdowns };
   }
 
   /**

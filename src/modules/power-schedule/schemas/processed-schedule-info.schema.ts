@@ -15,6 +15,9 @@ export class ProcessedScheduleInfo {
 
   @Prop({ type: ScheduleItemHoursSchema, required: true })
   scheduleItemHours: ScheduleItemHours;
+
+  @Prop()
+  groupKey?: string;
 }
 
 export const ProcessedScheduleInfoSchema = SchemaFactory.createForClass(ProcessedScheduleInfo);

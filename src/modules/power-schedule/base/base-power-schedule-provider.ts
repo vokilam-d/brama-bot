@@ -1,6 +1,7 @@
 import { Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import {
   INormalizedSchedule,
+  IPowerScheduleFetchResult,
   IScheduleItemHours,
   PowerScheduleProviderId,
 } from '../interfaces/schedule.interface';
@@ -19,6 +20,7 @@ export abstract class BasePowerScheduleProvider implements OnApplicationBootstra
 
   protected readonly lastScheduleHashes = new Map<string, string>();
   private consecutiveErrorCount = 0;
+  private isEmergencyShutdowns?: boolean;
   private pollTimer?: NodeJS.Timeout;
 
   constructor(
@@ -31,7 +33,7 @@ export abstract class BasePowerScheduleProvider implements OnApplicationBootstra
     return this.providerId;
   }
 
-  abstract fetchSchedules(): Promise<INormalizedSchedule[]>;
+  abstract fetchSchedules(): Promise<IPowerScheduleFetchResult>;
 
   protected abstract shouldSkipSchedule(scheduleItemHours: IScheduleItemHours): boolean;
 
@@ -45,7 +47,7 @@ export abstract class BasePowerScheduleProvider implements OnApplicationBootstra
 
   async getScheduleForDate(date: Date): Promise<INormalizedSchedule | null> {
     try {
-      const schedules = await this.fetchSchedules();
+      const { schedules } = await this.fetchSchedules();
       const targetIso = normalizeScheduleDate(date).toISOString();
       const match = schedules.find((s) => {
         return normalizeScheduleDate(s.date).toISOString() === targetIso;
@@ -97,8 +99,9 @@ export abstract class BasePowerScheduleProvider implements OnApplicationBootstra
 
   private async pollAndNotify(): Promise<void> {
     try {
-      const schedules = await this.fetchSchedules();
+      const { schedules, isEmergencyShutdowns } = await this.fetchSchedules();
       this.consecutiveErrorCount = 0;
+      await this.handleEmergencyShutdowns(isEmergencyShutdowns);
       for (const schedule of schedules) {
         const dateIso = this.getDateIso(schedule);
         if (this.shouldSkipSchedule(schedule.hours)) {
@@ -132,6 +135,20 @@ export abstract class BasePowerScheduleProvider implements OnApplicationBootstra
         this.handleError(error, `${this.providerId}: Failed to fetch schedule`);
         this.consecutiveErrorCount = 0;
       }
+    }
+  }
+
+  /** Passes emergency shutdowns state changes to the orchestrator, which decides whether to send. */
+  private async handleEmergencyShutdowns(isActive: boolean | null): Promise<void> {
+    if (isActive === null || isActive === this.isEmergencyShutdowns) {
+      return;
+    }
+
+    try {
+      await this.powerScheduleOrchestrator.onEmergencyShutdownsChange(this.providerId, isActive);
+      this.isEmergencyShutdowns = isActive;
+    } catch (error) {
+      this.handleError(error, `${this.providerId}: Failed to handle emergency shutdowns change`);
     }
   }
 

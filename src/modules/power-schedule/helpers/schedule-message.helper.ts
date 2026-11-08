@@ -13,9 +13,25 @@ export function buildScheduleTitleLine(date: Date, isFirstScheduleForDay: boolea
   return `🗓 ${title} на ${date.getDate()} ${getMonthName(date)}, ${getDayName(date)}`;
 }
 
-export function buildScheduleSourceLine(providerId: PowerScheduleProviderId): string {
+export function buildScheduleSourceLine(providerId: PowerScheduleProviderId, groupKey?: string): string {
   const providerName = POWER_SCHEDULE_PROVIDER_NAMES[providerId] ?? providerId;
-  return `ℹ️ Джерело: ${providerName}`;
+  const group = groupKey ? ` (група ${groupKey})` : '';
+  return `ℹ️ Джерело: ${providerName}${group}`;
+}
+
+export function buildEmergencyShutdownsMessage(
+  providerId: PowerScheduleProviderId,
+  isActive: boolean,
+): BotMessageText {
+  const messageText = new BotMessageText()
+    .addLine(BotMessageText.bold(isActive
+      ? `⚠️ Введені екстрені відключення електроенергії`
+      : `✅ Екстрені відключення електроенергії скасовані`))
+    .newLine();
+  if (isActive) {
+    messageText.addLine(`Графіки відключень не діють.`).newLine();
+  }
+  return messageText.add(BotMessageText.italic(buildScheduleSourceLine(providerId)));
 }
 
 export function buildDayScheduleMessage(

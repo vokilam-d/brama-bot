@@ -58,6 +58,14 @@ export interface IScheduleItemHours {
 export interface INormalizedSchedule {
   date: Date;
   hours: IScheduleItemHours;
+  /** Outage group as shown to users, e.g. `35.1`. */
+  groupKey?: string;
+}
+
+export interface IPowerScheduleFetchResult {
+  schedules: INormalizedSchedule[];
+  /** `null` when the provider cannot tell whether emergency shutdowns are in effect. */
+  isEmergencyShutdowns: boolean | null;
 }
 
 export enum PowerScheduleProviderId {
