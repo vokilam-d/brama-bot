@@ -149,10 +149,17 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
           .newLine()
           .merge(messageText),
       );
+    } else if (!this.powerScheduleConfigService.isEmergencyShutdownsSendingEnabled()) {
+      this.logger.debug(`Emergency shutdowns change skipped (sending disabled): ${logParams}`);
+      void this.botService.sendMessageToOwner(
+        new BotMessageText()
+          .addLine(`Tried to send emergency shutdowns to groups, but sending is disabled (${providerId}) text:`)
+          .newLine()
+          .merge(messageText),
+      );
     } else {
       this.lastEmergencyShutdownsSentAt = now;
-      // Owner only while the detection is being verified, then all enabled groups
-      void this.botService.sendMessageToOwner(messageText);
+      void this.botService.sendMessageToAllEnabledGroups(messageText);
       this.logger.debug(`Emergency shutdowns change sent: ${logParams}`);
     }
     await this.persistEmergencyShutdowns(processed);
