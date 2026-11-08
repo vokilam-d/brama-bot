@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { randomUUID } from 'crypto';
 import { CONFIG } from '../../../config';
 import {
   BotMessageText,
@@ -14,6 +15,9 @@ import { ITelegramMessage } from '../interfaces/message.interface';
 import { EventEmitter } from 'events';
 import { BotSentMessage } from '../schemas/bot-sent-message.schema';
 import { BotIncomingMessage } from '../schemas/bot-incoming-message.schema';
+import { IChatMessageRef } from '../interfaces/chat-message-ref.interface';
+import { ITelegramChat } from '../interfaces/chat.interface';
+import { parseMessageLink } from '../helpers/parse-message-link.helper';
 import { ITelegramUpdate } from '../interfaces/telegram-update.interface';
 import { ITelegramCallbackQuery } from '../interfaces/telegram-callback-query.interface';
 import { ITelegramInlineKeyboardButton } from '../interfaces/inline-keyboard-button.interface';
@@ -48,6 +52,10 @@ export interface ISendToAllGroupsResult {
   sentGroupCount: number;
   failedGroupCount: number;
   skippedGroupCount: number;
+  /** First message sent to each group. */
+  sentMessages: IChatMessageRef[];
+  /** Shared by every message sent, so all of them can be deleted with `/del_broadcast`. */
+  broadcastId: string;
 }
 
 const IGNORE_UNMENTIONED_CHAT_ID = -1003708538221;
@@ -58,6 +66,8 @@ enum AdminBotCommand {
   EmergencyShutdowns = '/emergency_shutdowns',
   GetCommands = '/get_commands',
   DeleteMessages = '/del',
+  /** Deletes every copy of a message sent to all enabled groups, given a link to any one of them. */
+  DeleteBroadcast = '/del_broadcast',
   EshopSubscribe = '/eshop_subscribe',
   EshopUnsubscribe = '/eshop_unsubscribe',
   EshopGetInfo = '/eshop_info',
@@ -401,51 +411,12 @@ export class BotService implements OnApplicationBootstrap {
         }
 
         case AdminBotCommand.DeleteMessages: {
-          const messageLinks = args;
-          if (!messageLinks.length) {
-            await this.sendMessage(chatId, new BotMessageText(`No message links provided, usage: /del <message link 1> <message link 2> ...`));
-            return;
-          }
+          await this.onOwnerDeleteMessages(chatId, args);
+          break;
+        }
 
-          const messageIdsByChatId = new Map<string, number[]>();
-
-          for (const messageLink of messageLinks) {
-            const pathParts = messageLink.replace('https://t.me/', '').split('/');
-            if (pathParts.length < 2) {
-              await this.sendMessage(
-                chatId,
-                new BotMessageText(`Invalid message link format: ${messageLink}`),
-              );
-              continue;
-            }
-
-            let deletedMessageChatId: string;
-            let deletedMessageId: number;
-
-            if (pathParts[0] === 'c') {
-              deletedMessageChatId = `-100${pathParts[1]}`;
-              deletedMessageId = parseInt(pathParts[3] ?? pathParts[2]);
-            } else {
-              deletedMessageChatId = `@${pathParts[0]}`;
-              deletedMessageId = parseInt(pathParts[1]);
-            }
-
-            if (!messageIdsByChatId.has(deletedMessageChatId)) {
-              messageIdsByChatId.set(deletedMessageChatId, []);
-            }
-            messageIdsByChatId.get(deletedMessageChatId).push(deletedMessageId);
-          }
-
-          let totalDeleted = 0;
-          for (const [deletedMessageChatId, messageIds] of messageIdsByChatId.entries()) {
-            await this.telegramApiService.execMethod(
-              ApiMethodName.DeleteMessages,
-              { chat_id: deletedMessageChatId, message_ids: messageIds },
-            );
-            totalDeleted += messageIds.length;
-          }
-
-          await this.sendMessage(chatId, new BotMessageText(`Deleted ${totalDeleted} messages`));
+        case AdminBotCommand.DeleteBroadcast: {
+          await this.onOwnerDeleteBroadcasts(chatId, args);
           break;
         }
 
@@ -460,6 +431,134 @@ export class BotService implements OnApplicationBootstrap {
       const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
       this.sendMessageToOwner(new BotMessageText(`Failed to handle owner message (message=${message.text}): ${errorMessage}`)).then();
     }
+  }
+
+  private async onOwnerDeleteMessages(chatId: number, messageLinks: string[]): Promise<void> {
+    if (!messageLinks.length) {
+      await this.sendMessage(chatId, new BotMessageText(`No message links provided, usage: ${AdminBotCommand.DeleteMessages} <message link 1> <message link 2> ...`));
+      return;
+    }
+
+    const messages: { chatId: string; messageId: number }[] = [];
+    for (const messageLink of messageLinks) {
+      const message = parseMessageLink(messageLink);
+      if (message) {
+        messages.push(message);
+      } else {
+        await this.sendMessage(chatId, new BotMessageText(`Invalid message link format: ${messageLink}`));
+      }
+    }
+
+    for (const [deletedChatId, messageIds] of this.groupMessageIdsByChatId(messages)) {
+      await this.deleteMessages(deletedChatId, messageIds);
+    }
+
+    await this.sendMessage(chatId, new BotMessageText(`Deleted ${messages.length} messages`));
+  }
+
+  /**
+   * Deletes all copies of messages sent to all enabled groups. Each argument is either a broadcast id
+   * or a link to any one copy.
+   */
+  private async onOwnerDeleteBroadcasts(chatId: number, args: string[]): Promise<void> {
+    if (!args.length) {
+      await this.sendMessage(chatId, new BotMessageText(`No broadcast ids or message links provided, usage: ${AdminBotCommand.DeleteBroadcast} <broadcast id or message link> ...`));
+      return;
+    }
+
+    const handledBroadcastIds = new Set<string>();
+    for (const arg of args) {
+      const broadcastId = await this.findBroadcastIdByArg(arg);
+      if (!broadcastId) {
+        await this.sendMessage(chatId, new BotMessageText(`Not a broadcast id or a link to a message sent to all enabled groups: ${arg}`));
+        continue;
+      }
+      if (handledBroadcastIds.has(broadcastId)) {
+        continue;
+      }
+      handledBroadcastIds.add(broadcastId);
+
+      await this.sendMessage(chatId, await this.deleteBroadcast(broadcastId));
+    }
+  }
+
+  private async findBroadcastIdByArg(arg: string): Promise<string | undefined> {
+    const message = parseMessageLink(arg);
+    if (message) {
+      return this.findBroadcastId({
+        chatId: await this.resolveChatId(message.chatId),
+        messageId: message.messageId,
+      });
+    }
+
+    const broadcastIdKey: keyof BotSentMessage = 'broadcastId';
+    const isKnownBroadcastId = await this.botSentMessageModel.exists({ [broadcastIdKey]: arg });
+    return isKnownBroadcastId ? arg : undefined;
+  }
+
+  /** Deletes every copy of a message sent to all enabled groups. Returns the report for the owner. */
+  private async deleteBroadcast(broadcastId: string): Promise<BotMessageText> {
+    const broadcastIdKey: keyof BotSentMessage = 'broadcastId';
+    const sentMessages = await this.botSentMessageModel
+      .find({ [broadcastIdKey]: broadcastId }, { chatId: 1, messageId: 1 })
+      .lean()
+      .exec();
+
+    let deletedCount = 0;
+    const failures: string[] = [];
+    for (const [deletedChatId, messageIds] of this.groupMessageIdsByChatId(sentMessages)) {
+      try {
+        await this.deleteMessages(deletedChatId, messageIds);
+        deletedCount += messageIds.length;
+      } catch (e) {
+        const errorMessage = e.description || e.message || e.toString?.() || JSON.stringify(e);
+        failures.push(`chatId=${deletedChatId}: ${errorMessage}`);
+      }
+    }
+
+    const report = new BotMessageText()
+      .add(['Broadcast ', BotMessageText.inlineCode(broadcastId), `: deleted ${deletedCount} of ${sentMessages.length} messages`]);
+    for (const failure of failures) {
+      report.newLine().add(`Failed: ${failure}`);
+    }
+    return report;
+  }
+
+  /** The broadcast the message was sent in, if it was sent to all enabled groups. */
+  private async findBroadcastId(message: IChatMessageRef): Promise<string | undefined> {
+    const sentMessage = await this.botSentMessageModel
+      .findOne({ chatId: message.chatId, messageId: message.messageId }, { broadcastId: 1 })
+      .lean()
+      .exec();
+    return sentMessage?.broadcastId;
+  }
+
+  /** The numeric id of a chat given as a numeric string or an `@username`. */
+  private async resolveChatId(chatId: string): Promise<number> {
+    if (!chatId.startsWith('@')) {
+      return Number(chatId);
+    }
+    const chat = await this.telegramApiService.execMethod<ITelegramChat>(ApiMethodName.GetChat, { chat_id: chatId });
+    return chat.id;
+  }
+
+  private groupMessageIdsByChatId<T extends string | number>(
+    messages: { chatId: T; messageId: number }[],
+  ): Map<T, number[]> {
+    const messageIdsByChatId = new Map<T, number[]>();
+    for (const { chatId, messageId } of messages) {
+      const messageIds = messageIdsByChatId.get(chatId) ?? [];
+      messageIds.push(messageId);
+      messageIdsByChatId.set(chatId, messageIds);
+    }
+    return messageIdsByChatId;
+  }
+
+  private async deleteMessages(chatId: string | number, messageIds: number[]): Promise<void> {
+    await this.telegramApiService.execMethod(
+      ApiMethodName.DeleteMessages,
+      { chat_id: chatId, message_ids: messageIds },
+    );
   }
 
   private async onReply(message: ITelegramMessage): Promise<void> {
@@ -497,8 +596,10 @@ export class BotService implements OnApplicationBootstrap {
     this.logger.debug(`Asking for code finished`);
   }
 
+  /** `replyTo` holds, per group, an earlier message to send this one as a reply to. */
   async sendMessageToAllEnabledGroups(
     text: SendableMessageText,
+    options: { replyTo?: IChatMessageRef[] } = {},
   ): Promise<ISendToAllGroupsResult> {
     this.logger.debug(`Sending message to all enabled groups... (text=${BotMessageText.toPlainText(text)})`);
     const result: ISendToAllGroupsResult = {
@@ -506,6 +607,8 @@ export class BotService implements OnApplicationBootstrap {
       sentGroupCount: 0,
       failedGroupCount: 0,
       skippedGroupCount: 0,
+      sentMessages: [],
+      broadcastId: randomUUID(),
     };
 
     const botConfig = this.botConfigService.getConfig();
@@ -526,8 +629,18 @@ export class BotService implements OnApplicationBootstrap {
       }
 
       try {
-        await this.sendMessage(group.id, text, { messageThreadId: group.threadId });
+        const replyToMessageId = options.replyTo?.find((ref) => ref.chatId === group.id)?.messageId;
+        const [sentMessage] = await this.sendMessage(group.id, text, {
+          messageThreadId: group.threadId,
+          replyParameters: replyToMessageId
+            ? { message_id: replyToMessageId, allow_sending_without_reply: true }
+            : undefined,
+          broadcastId: result.broadcastId,
+        });
         result.sentGroupCount++;
+        if (sentMessage) {
+          result.sentMessages.push({ chatId: sentMessage.chat.id, messageId: sentMessage.message_id });
+        }
       } catch (e) {
         result.failedGroupCount++;
 
@@ -672,6 +785,8 @@ export class BotService implements OnApplicationBootstrap {
       replyParameters?: ITelegramReplyParameters,
       replyMarkup?: ReplyMarkup,
       disableNotification?: boolean,
+      /** Marks the message as one copy of a message sent to all enabled groups. */
+      broadcastId?: string,
     } = {},
   ): Promise<ITelegramMessage[]> {
     const payload: any = {
@@ -705,7 +820,7 @@ export class BotService implements OnApplicationBootstrap {
       sentMessages.push(sentMessage);
     }
 
-    this.persistSentMessages(sentMessages).then();
+    this.persistSentMessages(sentMessages, options.broadcastId).then();
 
     return sentMessages;
   }
@@ -746,7 +861,7 @@ export class BotService implements OnApplicationBootstrap {
     }
   }
 
-  private async persistSentMessages(sentMessages: ITelegramMessage[]): Promise<void> {
+  private async persistSentMessages(sentMessages: ITelegramMessage[], broadcastId?: string): Promise<void> {
     for (const sentMessage of sentMessages) {
       if (!sentMessage) {
         const message = `No sent message to persist`;
@@ -762,6 +877,7 @@ export class BotService implements OnApplicationBootstrap {
           messageThreadId: sentMessage.message_thread_id,
           text: sentMessage.text,
           sentAtIso: new Date(sentMessage.date * 1000).toISOString(),
+          broadcastId,
         };
 
         await this.botSentMessageModel.create(sentMessageDocContents);

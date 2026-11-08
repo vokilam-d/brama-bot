@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { PowerScheduleProviderId } from '../interfaces/schedule.interface';
+import { ChatMessageRef, ChatMessageRefSchema } from '../../bot/schemas/chat-message-ref.schema';
 
 /** Single document: the last emergency shutdowns state sent, shared by all providers. */
 @Schema({ collection: 'processed-emergency-shutdowns' })
@@ -21,6 +22,13 @@ export class ProcessedEmergencyShutdowns {
    */
   @Prop({ required: true })
   updatedAt: Date;
+
+  /**
+   * Group messages that announced the current emergency shutdowns, so the message about their end
+   * is sent as a reply to them. Empty when the start was not announced in groups.
+   */
+  @Prop({ type: [ChatMessageRefSchema] })
+  activeSentMessages?: ChatMessageRef[];
 }
 
 export const ProcessedEmergencyShutdownsSchema = SchemaFactory.createForClass(ProcessedEmergencyShutdowns);

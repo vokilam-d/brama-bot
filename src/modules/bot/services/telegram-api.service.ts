@@ -17,6 +17,7 @@ export enum ApiMethodName {
   SendChatAction = 'sendChatAction',
   SetMessageReaction = 'setMessageReaction',
   DeleteMessages = 'deleteMessages',
+  GetChat = 'getChat',
 }
 
 @Injectable()
