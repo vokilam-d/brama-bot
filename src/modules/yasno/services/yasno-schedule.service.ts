@@ -110,8 +110,9 @@ export class YasnoScheduleService
 
     const todayStatus = groupSchedule.today?.status;
     const isEmergencyShutdowns = todayStatus ? todayStatus === 'EmergencyShutdowns' : null;
+    const emergencyShutdownsUpdatedAt = groupSchedule.updatedOn ? new Date(groupSchedule.updatedOn) : undefined;
 
-    return { schedules, isEmergencyShutdowns };
+    return { schedules, isEmergencyShutdowns, emergencyShutdownsUpdatedAt };
   }
 
   private async resolveGroupKey(): Promise<string | null> {

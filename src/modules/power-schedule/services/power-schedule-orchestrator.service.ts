@@ -20,6 +20,7 @@ import {
 import { normalizeScheduleDate } from '../helpers/normalize-schedule-date.helper';
 
 const SEND_TO_GROUPS_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+const SEND_TO_GROUPS_COOLDOWN_MINUTES = SEND_TO_GROUPS_COOLDOWN_MS / 60_000;
 const EMERGENCY_SHUTDOWNS_MUTEX_KEY = 'emergency-shutdowns';
 
 @Injectable()
@@ -27,6 +28,7 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
   private readonly logger = new Logger(PowerScheduleOrchestratorService.name);
   private readonly dateMutexes = new Map<string, Promise<unknown>>();
   private readonly lastSentToGroupsAtByDate = new Map<string, Date>();
+  private lastEmergencyShutdownsSentAt?: Date;
 
   constructor(
     @InjectModel(ProcessedScheduleInfo.name) private processedScheduleInfoModel: Model<ProcessedScheduleInfo>,
@@ -72,37 +74,77 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
 
   /**
    * Called by a provider when it sees emergency shutdowns start or end. The state is shared by all
-   * providers, so a state another provider already sent is skipped. Serialized like schedules, so
-   * two providers reporting at once don't both send.
+   * providers: a state already sent is skipped, and when providers disagree the more recently
+   * updated report wins. Serialized like schedules, so two providers reporting at once don't both send.
    */
-  async onEmergencyShutdownsChange(providerId: PowerScheduleProviderId, isActive: boolean): Promise<void> {
+  async onEmergencyShutdownsChange(
+    providerId: PowerScheduleProviderId,
+    isActive: boolean,
+    updatedAt: Date,
+  ): Promise<void> {
     await this.withDateMutex(
       EMERGENCY_SHUTDOWNS_MUTEX_KEY,
-      () => this.handleEmergencyShutdownsChange(providerId, isActive),
+      () => this.handleEmergencyShutdownsChange(providerId, isActive, updatedAt),
     );
   }
 
-  private async handleEmergencyShutdownsChange(providerId: PowerScheduleProviderId, isActive: boolean): Promise<void> {
+  private async handleEmergencyShutdownsChange(
+    providerId: PowerScheduleProviderId,
+    isActive: boolean,
+    updatedAt: Date,
+  ): Promise<void> {
     const prevProcessed = await this.processedEmergencyShutdownsModel.findOne().lean().exec();
     const messageText = buildEmergencyShutdownsMessage(providerId, isActive);
+    const processed: ProcessedEmergencyShutdowns = { providerId, isActive, updatedAt };
+    const logParams = `providerId=${providerId}, isActive=${isActive}, updatedAt=${updatedAt.toISOString()}`;
 
     if (prevProcessed?.isActive === isActive) {
-      this.logger.debug(`Emergency shutdowns change ignored (not changed): providerId=${providerId}, isActive=${isActive}`);
+      this.logger.debug(`Emergency shutdowns change ignored (not changed): ${logParams}`);
       void this.botService.sendMessageToOwner(
         new BotMessageText().addLine(`Skipped (${providerId}): `).newLine().merge(messageText),
+      );
+      if (updatedAt.getTime() > prevProcessed.updatedAt.getTime()) {
+        await this.persistEmergencyShutdowns(processed);
+      }
+      return;
+    }
+
+    if (prevProcessed && updatedAt.getTime() < prevProcessed.updatedAt.getTime()) {
+      const prevParams = `${prevProcessed.providerId} at ${prevProcessed.updatedAt.toISOString()}`;
+      this.logger.debug(`Emergency shutdowns change ignored (older than ${prevParams}): ${logParams}`);
+      void this.botService.sendMessageToOwner(
+        new BotMessageText()
+          .addLine(`Skipped (${providerId}, updated ${updatedAt.toISOString()}, older than ${prevParams}): `)
+          .newLine()
+          .merge(messageText),
       );
       return;
     }
 
+    const now = new Date();
+    const withinCooldown = this.lastEmergencyShutdownsSentAt
+      && (now.getTime() - this.lastEmergencyShutdownsSentAt.getTime()) < SEND_TO_GROUPS_COOLDOWN_MS;
+
     if (!prevProcessed && !isActive) {
-      this.logger.debug(`Emergency shutdowns not active, nothing to send: providerId=${providerId}`);
+      this.logger.debug(`Emergency shutdowns not active, nothing to send: ${logParams}`);
+    } else if (withinCooldown) {
+      this.logger.debug(`Emergency shutdowns change skipped (cooldown): ${logParams}`);
+      void this.botService.sendMessageToOwner(
+        new BotMessageText()
+          .addLine(`ATTENTION! Skipped (sent in last ${SEND_TO_GROUPS_COOLDOWN_MINUTES} mins): ${providerId}`)
+          .newLine()
+          .merge(messageText),
+      );
     } else {
+      this.lastEmergencyShutdownsSentAt = now;
       // Owner only while the detection is being verified, then all enabled groups
       void this.botService.sendMessageToOwner(messageText);
-      this.logger.debug(`Emergency shutdowns change sent: providerId=${providerId}, isActive=${isActive}`);
+      this.logger.debug(`Emergency shutdowns change sent: ${logParams}`);
     }
+    await this.persistEmergencyShutdowns(processed);
+  }
 
-    const processed: ProcessedEmergencyShutdowns = { providerId, isActive, updatedAt: new Date() };
+  private async persistEmergencyShutdowns(processed: ProcessedEmergencyShutdowns): Promise<void> {
     await this.processedEmergencyShutdownsModel.findOneAndReplace({}, processed, { upsert: true });
   }
 
@@ -212,7 +254,7 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
     if (withinCooldown) {
       this.logger.debug(`Schedule change skipped (cooldown): dateIso=${dateIso}, providerId=${providerId}`);
       const ownerMessageText = new BotMessageText()
-        .addLine(`ATTENTION! Skipped (sent to groups in last 30 mins): ${providerId}, ${dateIso}`)
+        .addLine(`ATTENTION! Skipped (sent to groups in last ${SEND_TO_GROUPS_COOLDOWN_MINUTES} mins): ${providerId}, ${dateIso}`)
         .newLine()
         .merge(messageText);
       void this.botService.sendMessageToOwner(ownerMessageText);

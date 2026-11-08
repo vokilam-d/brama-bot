@@ -99,9 +99,9 @@ export abstract class BasePowerScheduleProvider implements OnApplicationBootstra
 
   private async pollAndNotify(): Promise<void> {
     try {
-      const { schedules, isEmergencyShutdowns } = await this.fetchSchedules();
+      const { schedules, isEmergencyShutdowns, emergencyShutdownsUpdatedAt } = await this.fetchSchedules();
       this.consecutiveErrorCount = 0;
-      await this.handleEmergencyShutdowns(isEmergencyShutdowns);
+      await this.handleEmergencyShutdowns(isEmergencyShutdowns, emergencyShutdownsUpdatedAt ?? new Date());
       for (const schedule of schedules) {
         const dateIso = this.getDateIso(schedule);
         if (this.shouldSkipSchedule(schedule.hours)) {
@@ -139,13 +139,13 @@ export abstract class BasePowerScheduleProvider implements OnApplicationBootstra
   }
 
   /** Passes emergency shutdowns state changes to the orchestrator, which decides whether to send. */
-  private async handleEmergencyShutdowns(isActive: boolean | null): Promise<void> {
+  private async handleEmergencyShutdowns(isActive: boolean | null, updatedAt: Date): Promise<void> {
     if (isActive === null || isActive === this.isEmergencyShutdowns) {
       return;
     }
 
     try {
-      await this.powerScheduleOrchestrator.onEmergencyShutdownsChange(this.providerId, isActive);
+      await this.powerScheduleOrchestrator.onEmergencyShutdownsChange(this.providerId, isActive, updatedAt);
       this.isEmergencyShutdowns = isActive;
     } catch (error) {
       this.handleError(error, `${this.providerId}: Failed to handle emergency shutdowns change`);

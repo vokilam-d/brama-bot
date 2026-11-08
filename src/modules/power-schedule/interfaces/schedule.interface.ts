@@ -66,6 +66,8 @@ export interface IPowerScheduleFetchResult {
   schedules: INormalizedSchedule[];
   /** `null` when the provider cannot tell whether emergency shutdowns are in effect. */
   isEmergencyShutdowns: boolean | null;
+  /** When the provider last updated `isEmergencyShutdowns`; the check time is used when omitted. */
+  emergencyShutdownsUpdatedAt?: Date;
 }
 
 export enum PowerScheduleProviderId {
