@@ -800,12 +800,14 @@ export class BotService implements OnApplicationBootstrap {
 
   private buildScheduleSettingsText(): BotMessageText {
     const sending = this.powerScheduleConfigService.isScheduleSendingEnabled() ? 'ON' : 'OFF';
-    const kd = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Kd) ? 'ON' : 'OFF';
+    const emergency = this.powerScheduleConfigService.isEmergencyShutdownsSendingEnabled() ? 'ON' : 'OFF';
+    const kd =this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Kd) ? 'ON' : 'OFF';
     const dtek = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ? 'ON' : 'OFF';
     const yasno = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno) ? 'ON' : 'OFF';
     return new BotMessageText(BotMessageText.bold('Графіки: Налаштування'))
       .newLine()
       .addLine(`Загальне надсилання в групи: ${sending}`)
+      .addLine(`Екстрені відключення в групи: ${emergency}`)
       .addLine(`KD: ${kd} | DTEK: ${dtek} | Yasno: ${yasno}`)
       .newLine()
       .addLine('Натисніть кнопку, щоб перемкнути.');
@@ -817,12 +819,15 @@ export class BotService implements OnApplicationBootstrap {
       callback_data: data,
     });
     const sending = this.powerScheduleConfigService.isScheduleSendingEnabled() ? '✅ Загальне' : '❌ Загальне';
+    const emergency = this.powerScheduleConfigService.isEmergencyShutdownsSendingEnabled()
+      ? '✅ Екстрені'
+      : '❌ Екстрені';
     const kd = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Kd) ? '✅ KD' : '❌ KD';
     const dtek = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Dtek) ? '✅ DTEK' : '❌ DTEK';
     const yasno = this.powerScheduleConfigService.isProviderEnabled(PowerScheduleProviderId.Yasno) ? '✅ Yasno' : '❌ Yasno';
     return {
       inline_keyboard: [
-        [btn(sending, 'schedule_toggle_sending')],
+        [btn(sending, 'schedule_toggle_sending'), btn(emergency, 'schedule_toggle_emergency')],
         [btn(kd, 'schedule_toggle_kd'), btn(dtek, 'schedule_toggle_dtek'), btn(yasno, 'schedule_toggle_yasno')],
       ],
     };
@@ -844,6 +849,8 @@ export class BotService implements OnApplicationBootstrap {
     try {
       if (data === 'schedule_toggle_sending') {
         await this.powerScheduleConfigService.toggleScheduleSendingEnabled();
+      } else if (data === 'schedule_toggle_emergency') {
+        await this.powerScheduleConfigService.toggleEmergencyShutdownsSendingEnabled();
       } else if (providerIdByData[data]) {
         await this.powerScheduleConfigService.toggleProviderEnabled(providerIdByData[data]);
       } else {

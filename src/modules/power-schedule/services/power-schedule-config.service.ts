@@ -73,6 +73,10 @@ export class PowerScheduleConfigService implements OnApplicationBootstrap {
     return this.config.scheduleSendingEnabled ?? false;
   }
 
+  isEmergencyShutdownsSendingEnabled(): boolean {
+    return this.config.emergencyShutdownsSendingEnabled ?? false;
+  }
+
   isProviderEnabled(providerId: PowerScheduleProviderId): boolean {
     const ids = this.config.enabledProviderIds;
     if (!ids || ids.length === 0) {
@@ -84,6 +88,10 @@ export class PowerScheduleConfigService implements OnApplicationBootstrap {
   async toggleScheduleSendingEnabled(): Promise<void> {
     const current = this.config.scheduleSendingEnabled ?? true;
     await this.updateConfig('scheduleSendingEnabled', !current);
+  }
+
+  async toggleEmergencyShutdownsSendingEnabled(): Promise<void> {
+    await this.updateConfig('emergencyShutdownsSendingEnabled', !this.isEmergencyShutdownsSendingEnabled());
   }
 
   async toggleProviderEnabled(providerId: PowerScheduleProviderId): Promise<void> {

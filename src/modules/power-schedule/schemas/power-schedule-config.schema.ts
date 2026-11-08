@@ -16,6 +16,10 @@ export class PowerScheduleConfig {
   @Prop({ default: true })
   scheduleSendingEnabled: boolean;
 
+  /** When false, orchestrator does not send emergency shutdowns messages to groups. */
+  @Prop({ default: false })
+  emergencyShutdownsSendingEnabled: boolean;
+
   /** Provider IDs that are enabled (polling runs). When missing/empty, all are enabled. */
   @Prop({
     type: [String],

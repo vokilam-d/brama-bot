@@ -375,19 +375,16 @@ export class PowerScheduleOrchestratorService implements OnApplicationBootstrap 
       if (chatId !== undefined) {
         await this.botService.sendMessage(chatId, messageText);
       } else if (sendToGroups) {
-        if (this.powerScheduleConfigService.isScheduleSendingEnabled()) {
-          // await this.botService.sendMessageToAllEnabledGroups(messageText);
+        if (this.powerScheduleConfigService.isEmergencyShutdownsSendingEnabled()) {
+          await this.botService.sendMessageToAllEnabledGroups(messageText);
 
           const ownerMessageText = new BotMessageText()
             .addLine(`Sent (${providerId}, updated ${updatedAt.toISOString()})`)
             .newLine()
             .merge(messageText);
-
-          ownerMessageText.newLine().addLine(`NOT SENT, DISABLED`);
-          
           void this.botService.sendMessageToOwner(ownerMessageText);
         } else {
-          void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send emergency shutdowns to groups, but sending is disabled (${providerId}) text:\n\n${messageText.toString()}`));
+          void this.botService.sendMessageToOwner(new BotMessageText(`Tried to send emergency shutdowns to groups, but emergency shutdowns sending is disabled (${providerId}) text:\n\n${messageText.toString()}`));
         }
       }
     } catch (e) {
